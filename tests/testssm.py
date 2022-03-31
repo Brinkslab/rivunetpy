@@ -1,11 +1,11 @@
 from filtering.morphology import ssm
-from rivuletpy.utils.io import * 
+from rivuletpy.utils.io import loadimg
 import matplotlib.pyplot as plt
 import skfmm
 
 ITER = 30
 
-img = loadimg('/home/siqi/ncidata/rivuletpy/tests/data/test-crop.tif')
+img = loadimg('data/Series021.v3dpbd.tif')
 bimg = (img > 0).astype('int')
 dt = skfmm.distance(bimg, dx=1)
 sdt = ssm(dt, anisotropic=True, iterations=ITER)
