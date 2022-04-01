@@ -10,13 +10,13 @@ from skimage import data, restoration, util
 
 import rtrace
 
-FILENAME = 'data/Series017.v3dpbd.tif'
-FORCE = True  # Force recalculation of SWC
+FILENAME = 'data/test.tif'
+FORCE = False  # Force recalculation of SWC
 
 if __name__ == '__main__':
     out_name = FILENAME.replace('.tif', '.r2.swc')
     image = imread(FILENAME)
-    fig, ax = plt.subplots(1, 2)
+    fig, ax = plt.subplots(1, 3)
 
     if image.ndim == 3:  # Z stack
         flat_image = np.max(image, axis=0)
@@ -35,7 +35,6 @@ if __name__ == '__main__':
     ax[0].set_title('Input')
     ax[1].imshow(flat_image > threshold, cmap='gray')
     ax[1].set_title('Binary')
-    fig.show()
 
     if (not os.path.exists(out_name)) or FORCE:
         rtrace.main(file=FILENAME, threshold=threshold, out=out_name)
@@ -43,5 +42,9 @@ if __name__ == '__main__':
     swc_mat = loadswc(out_name)
     s = SWC()
     s._data = swc_mat
-    s.view()
-    input("Press any key to continue...")
+    s.as_image(ax=ax[2])
+    ax[2].set_title('SWC')
+
+
+    fig.show()
+

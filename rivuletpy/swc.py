@@ -222,6 +222,104 @@ class SWC(object):
             except KeyboardInterrupt:
                 break
 
+    def as_image(self, **kwargs):
+        """Exports SWC data as 2D image.
+
+        When a `matplotlib.axes.Axes` object is added as a keyword argument `ax`, the 2D data will be
+        added directly to the plot. Alternatively, no keyword arguments, or keyword arguments specifying
+        a `matplotlib.figure.Figure` object (`figsize`, `frameon`, etc.) can be entered, resulting in
+        the function returning a 2D image of the SWC.
+
+        Args:
+            **kwargs: Keyword argument `ax` (matplotlib.axes.Axes) OR keyword arguments from `matplotlib.figure.Figure`
+
+        Returns:
+            PIL.Image.Image: When set to output an image
+
+        Examples:
+
+            Setup:\n
+            >>> import matplotlib.pyplot as plt
+            >>> fig, ax = plt.subplots(1, 1)
+            >>> swc_mat = loadswc(example.swc)
+            >>> s = SWC()
+            >>> s._data = swc_mat
+
+            As image:\n
+            >>> im = s.as_image()
+            >>> ax.imshow(im, cmap='gray')
+
+            Direct to plot:\n
+            >>> s.as_image(ax=ax)
+
+        """
+
+        from itertools import cycle
+
+        import numpy as np
+        from PIL import Image
+        from matplotlib.axes import Axes
+        import matplotlib.pyplot as plt
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+        # Compute the center of mass
+        center = self._data[:, 2:5].mean(axis=0)
+        translated = self._data[:, 2:5] - \
+            np.tile(center, (self._data.shape[0], 1))
+
+        lid = self._data[:, 0]
+
+        # Plot square by default, always turn off frame
+        if kwargs == {}:
+            kwargs = {'figsize' : [6.4, 6.4]}
+        kwargs['frameon'] = False
+
+        if 'ax' in kwargs: # Plotting directly to axes
+            AX_SET = True
+            ax = kwargs['ax']
+            ax.set_aspect('equal', adjustable='box')
+        else:
+            AX_SET = False
+            fig = Figure(**kwargs)
+
+            canvas = FigureCanvasAgg(fig)
+            ax = fig.add_subplot()
+            ax.set_axis_off()
+
+        prop_cycle = plt.rcParams['axes.prop_cycle']
+        colors = cycle(prop_cycle.by_key()['color'])
+        line_color = next(colors)
+
+        for ii in range(self._data.shape[0]):
+            # Change color if its a bifurcation
+            if (self._data[ii, 0] == self._data[:, -1]).sum() > 1:
+                line_color = next(colors)
+
+            # Draw a line between this node and its parent
+            if ii < self._data.shape[0] - 1 and self._data[ii, 0] == self._data[ii + 1, -1]:
+                # print(f'Plot\t{translated[ii, :]}\t{translated[ii + 1, :]}')
+                ax.plot(translated[ii:ii+2, 0], translated[ii:ii+2, 1], color=line_color)
+
+            else:
+                pid = self._data[ii, -1]
+                pidx = np.argwhere(pid == lid)
+                pidx = np.squeeze(pidx, axis=1) # Remove unnecessary dimension
+                if len(pidx) == 1:
+                    # print(f'Plot\t{translated[ii, :]}\t{translated[pidx, :].flatten()}')
+                    x_indices = np.concatenate([[ii], pidx])
+                    ax.plot(translated[x_indices, 0], translated[x_indices, 1], color=line_color)
+
+        if AX_SET:
+            return None
+        else:
+            canvas.draw()
+            rgba = np.asarray(canvas.buffer_rgba())
+            im = Image.fromarray(rgba)
+
+            return im
+
+
     def push_nodes_with_binary(self, b, step_ratio=0.1, niter=0):
         '''
         Push the nodes towards the center with the binary image boundaries
