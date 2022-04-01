@@ -1,2 +1,3 @@
 #!/bin/bash
-python3 apps/rtrace --file tests/data/test-crop.tif --threshold 0 --filter --threshold -1
+cd /home/twh/PycharmProjects/rivuletpy
+python3 apps/rtrace --file tests/data/test.tif --threshold 10
