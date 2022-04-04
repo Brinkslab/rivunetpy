@@ -263,6 +263,8 @@ class SWC(object):
         from matplotlib.figure import Figure
         from matplotlib.backends.backend_agg import FigureCanvasAgg
 
+        MAX_SEGMENTS = 2_500
+
         # Compute the center of mass
         center = self._data[:, 2:5].mean(axis=0)
         translated = self._data[:, 2:5] - \
@@ -291,7 +293,12 @@ class SWC(object):
         colors = cycle(prop_cycle.by_key()['color'])
         line_color = next(colors)
 
-        for ii in range(self._data.shape[0]):
+        segments = self._data.shape[0]
+        if segments > MAX_SEGMENTS:
+            print(f'Too many ({segments}) segments to plot. Limiting plot to {MAX_SEGMENTS} segments.')
+            segments = MAX_SEGMENTS
+
+        for ii in range(segments):
             # Change color if its a bifurcation
             if (self._data[ii, 0] == self._data[:, -1]).sum() > 1:
                 line_color = next(colors)

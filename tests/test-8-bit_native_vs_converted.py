@@ -13,6 +13,8 @@ import tifffile as tif
 
 import rtrace
 
+FORCE = False
+
 DIR = os.path.join('data', 'test-bitdepth')
 
 FILENAME_uint8 = '8-bit.tif'
@@ -59,6 +61,7 @@ if __name__ == '__main__':
 
     all_images = [images, downcast_images]
     all_filenames = [filenames_images, downcast_filenames_images]
+    print(f'(D)\tComplete list of filenames to: {all_filenames}')
 
     fig, ax = plt.subplots(2*len(images), 3)
 
@@ -74,25 +77,34 @@ if __name__ == '__main__':
 
             threshold = threshold_otsu(flat_image)
 
-            ax[0, kk].imshow(flat_image, cmap='gray')
-            ax[0, kk].set_title(f'${bits}-bit {label}$')
+            ax[kk, 0].imshow(flat_image, cmap='gray')
+            ax[kk, 0].set_title(f'${bits}-bit {label}$')
             # ax[0, kk].colorbar()
-            ax[1, kk].imshow(flat_image > threshold, cmap='gray')
-            ax[1, kk].set_title(f'$T={threshold}$')
+            ax[kk, 1].imshow(flat_image > threshold, cmap='gray')
+            ax[kk, 1].set_title(f'$T={threshold}$')
 
-            rtrace.main(file=filename, threshold=threshold, out=SWC_BUFFER_NAME)
+            swc_name = os.path.join(filename.replace('.tif', '.swc'))
 
-            swc_mat = loadswc(SWC_BUFFER_NAME)
-            s = SWC()
-            s._data = swc_mat
-            s.as_image(ax=ax[2, kk])
-            ax[2, kk].set_title('SWC')
-            swc_name = os.path.join(filename.replace('.v3dpbd.tif', '.swc'))
-            s.save(swc_name)
+            if (not os.path.exists(swc_name)) or FORCE:
+                rtrace.main(file=filename, threshold=threshold, out=SWC_BUFFER_NAME)
+                swc_mat = loadswc(SWC_BUFFER_NAME)
+                s = SWC()
+                s._data = swc_mat
+                print(f'(D)\tSaving SWC to: {swc_name}')
+                s.save(swc_name)
+            else:
+                print(f'(D)\tOpening SWC from: {swc_name}')
+                swc_mat = loadswc(swc_name)
+                s = SWC()
+                s._data = swc_mat
+
+            s.as_image(ax=ax[kk, 2])
+            ax[kk, 2].set_title('SWC')
 
             # print(f'(D)\tSaving plot to: {ff}')
             # fig.savefig(ff)
             # Image.open(ff).convert('RGB').save(ff.replace('.png', '.jpg'), 'JPEG')
             # os.remove(ff)
-            fig.show()
+
+    fig.show()
 

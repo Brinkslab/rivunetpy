@@ -61,7 +61,7 @@ if __name__ == '__main__':
         ax[1].set_title(f'Threshold={threshold}')
 
         if (not os.path.exists(out_name)) or FORCE:
-            nn = 'data/sweep/' + str(threshold).zfill(4) + '-' + out_name.replace('data/', '')
+            nn = 'data/testrivulet2-swcs/' + str(threshold).zfill(4) + '-' + out_name.replace('data/', '')
             print(f'(C)\tSaving to: {nn}')
             rtrace.main(file=FILENAME, threshold=threshold, out=out_name)
 
@@ -73,7 +73,7 @@ if __name__ == '__main__':
 
         s.save(nn)
 
-        ff = 'data/sweep-images/' + str(threshold).zfill(4) + '-' + FILENAME.replace('.tif', '.png').replace('data/',
+        ff = 'data/testrivulet2-images/' + str(threshold).zfill(4) + '-' + FILENAME.replace('.tif', '.png').replace('data/',
                                                                                                              '')
         print(f'(D)\tSaving plot to: {ff}')
         fig.savefig(ff)
