@@ -3,7 +3,7 @@ import os
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-from rivuletpy.utils.io import loadswc
+from rivuletpy.utils.io import loadswc, loadimg
 from rivuletpy.swc import SWC
 from skimage.io import imread
 from skimage.util import img_as_ubyte
@@ -11,9 +11,9 @@ from skimage.filters import threshold_otsu
 from skimage import data, restoration, util
 import tifffile as tif
 
-import rtrace
+from tests import rtrace
 
-FORCE = False
+FORCE = True
 
 DIR = os.path.join('data', 'test-bitdepth')
 

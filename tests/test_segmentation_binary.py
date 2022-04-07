@@ -5,13 +5,11 @@ import numpy as np
 import tifffile as tif
 import matplotlib.pyplot as plt
 from skimage.filters import threshold_otsu
-from mpl_toolkits.axes_grid1.inset_locator import (inset_axes, InsetPosition,
-                                                  mark_inset)
-import mpl_toolkits.axisartist
+from mpl_toolkits.axes_grid1.inset_locator import (InsetPosition)
 import SimpleITK as sitk
 
-from rivuletpy.utils.io import loadimg, loadtiff3d
-from tests.volume_rendering_vtk import volume_view, volume_show
+from rivuletpy.utils.io import loadtiff3d
+from rivuletpy.utils.volume_rendering_vtk import volume_show
 
 plt.style.use('dark_background')
 
@@ -37,6 +35,7 @@ THRESHOLD_OPTIONS = {'Otsu' : sitk.OtsuThresholdImageFilter,
                      'Reyni Entropy' : sitk.RenyiEntropyThresholdImageFilter,
                      'Shanbhag' : sitk.ShanbhagThresholdImageFilter,
                      'Triangle' : sitk.TriangleThresholdImageFilter}
+
 
 # THRESHOLDS = THRESHOLD_OPTIONS.keys()
 THRESHOLDS = list(THRESHOLD_OPTIONS.keys())

@@ -13,6 +13,12 @@ import matplotlib.pyplot as plt
 
 from vtk.util.vtkConstants import VTK_UNSIGNED_CHAR
 
+def get_tf(data): # Get transfer functions
+    q = mquantiles(data.flatten(), [0.7, 0.98])
+    q[0] = max(q[0], 1)
+    q[1] = max(q[1], 1)
+    tf = [[0, 0, 0, 0, 0], [q[0], 0, 0, 0, 0], [q[1], 1, 1, 1, 0.5], [data.max(), 1, 1, 1, 1]]
+    return tf
 
 def numpy2VTK(img, spacing=[1.0, 1.0, 1.0]):
     # evolved from code from Stou S.,
@@ -222,35 +228,7 @@ def vtk_basic(actors):
     iren.Start()
 
 
-def volume_view(img, labeled=False):
-    data = sitk.GetArrayFromImage(img)  #
 
-    q = mquantiles(data.flatten(), [0.7, 0.98])
-    q[0] = max(q[0], 1)
-    q[1] = max(q[1], 1)
-    tf = [[0, 0, 0, 0, 0], [q[0], 0, 0, 0, 0], [q[1], 1, 1, 1, 0.5], [data.max(), 1, 1, 1, 1]]
-
-    actor_list = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
-
-    vtk_basic(actor_list)
-
-
-def volume_show(img, labeled=False, w=400, h=300, pos=None, az=None, el=None, up=None, foc=None):
-    data = sitk.GetArrayFromImage(img)  #
-
-    q = mquantiles(data.flatten(), [0.7, 0.98])
-    q[0] = max(q[0], 1)
-    q[1] = max(q[1], 1)
-    tf = [[0, 0, 0, 0, 0], [q[0], 0, 0, 0, 0], [q[1], 1, 1, 1, 0.5], [data.max(), 1, 1, 1, 1]]
-
-    actor_list = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
-
-    ren, renWin, iren = vtk_create_renderer(actor_list, light_follows=False)
-
-    set_camera(ren, volume=actor_list[0], pos=pos, az=az, el=el, up=up, foc=foc)
-
-    img = vtk_show(ren)
-    return img
 
 
 # https://nbviewer.org/urls/bitbucket.org/somada141/pyscience/raw/master/20141029_VolumeRendering/Material/VolumeRendering.ipynb

@@ -6,11 +6,9 @@ import matplotlib.pyplot as plt
 from rivuletpy.utils.io import loadswc
 from rivuletpy.swc import SWC
 from skimage.io import imread
-from skimage.util import img_as_ubyte
 from skimage.filters import threshold_otsu
-from skimage import data, restoration, util
 
-import rtrace
+from rivuletpy import rtrace
 
 FILENAME = 'data/Series017.v3dpbd.tif'
 FORCE = True  # Force recalculation of SWC
@@ -24,8 +22,6 @@ if __name__ == '__main__':
 
     print(f'(I)\tImage of type {image.dtype} with a intensity extrema (max, min) of, '
           f'{(image.min(), image.max())}')
-
-
 
     # if type(image.dtype) is type(np.uint8):
     #     pass
