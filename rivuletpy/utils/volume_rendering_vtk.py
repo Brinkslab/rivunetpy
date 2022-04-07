@@ -93,7 +93,8 @@ def set_camera(ren, volume=None, pos=None, az=None, el=None, up=None, foc=None):
     camera.SetFocalPoint(*foc)
     camera.Azimuth(az)
     camera.Elevation(el)
-    camera.SetClippingRange(-1E6, 0)
+    # camera.SetClippingRange(-1E6, 0)
+    camera.ResetCameraClippingRange()
 
 
 def RGB_from_hex(hex: str, norm=False):
@@ -253,5 +254,6 @@ def vtk_show(renderer, width=400, height=300):
     data = memoryview(writer.GetResult())
 
     return Image.open(io.BytesIO(data))
+
 
 #####

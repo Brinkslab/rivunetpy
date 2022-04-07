@@ -4,7 +4,32 @@ from scipy import io as sio
 import SimpleITK as sitk
 
 
-def loadimg(file, target_resolution):
+def reduce_to_8_bit(img, strict=True, report=False):
+    assert type(img) is np.ndarray, f'Expected image to be of type np.ndarray, instead got: {type(img)}'
+
+    pass
+
+    if img.dtype in (np.dtype(np.uint8), np.dtype('uint8')):
+        pass
+    elif img.dtype in (np.dtype(np.uint16), np.dtype('uint16')):
+        if img.max() <= 4095:  # 12-bit
+            orig_depth = 12
+            img = img / 16
+        else:
+            orig_depth = 16
+            img = img / 256
+
+        img = img.astype(np.uint8)
+        print(f'Converted a {orig_depth}-bit image to 8-bit.')
+    else:
+        if strict:
+            raise TypeError('Expected an image with type np.uint8 or np.uint16 (8/12/16-bit depth), '
+                            f'instead got image of type: {img.dtype}')
+
+    return img
+
+
+def loadimg(file, target_resolution, ):
     if file.endswith('.mat'):
         filecont = sio.loadmat(file)
         img = filecont['img']
@@ -13,6 +38,8 @@ def loadimg(file, target_resolution):
         img = np.swapaxes(img, 0, 1)
     elif file.endswith('.tif'):
         img = loadtiff3d(file)
+        img = np.swapaxes(img, 0, 2)
+        img = np.flip(img, axis=1)
     elif file.endswith('.mhd'):
         from scipy.ndimage.interpolation import zoom
         mhd = sitk.ReadImage(file)
@@ -31,21 +58,18 @@ def loadimg(file, target_resolution):
     else:
         raise IOError("The extension of " + file +
                       'is not supported. File extension supported are: *.tif, *.mat, *.nii')
+
+
+    # img = reduce_to_8_bit(img, strict=True, report=True)
+
     return img
 
 
 def loadtiff3d(filepath):
     """Load a tiff file into 3D numpy array"""
-    from libtiff import TIFF
-    tiff = TIFF.open(filepath, mode='r')
-    stack = []
-    for sample in tiff.iter_images():
-        stack.append(np.rot90(np.fliplr(np.flipud(sample))))
-    out = np.dstack(stack)
-    tiff.close()
-
+    im = sitk.ReadImage(filepath, imageIO='TIFFImageIO')
+    out = sitk.GetArrayFromImage(im)
     return out
-
 
 def writetiff3d(filepath, block):
     from libtiff import TIFF

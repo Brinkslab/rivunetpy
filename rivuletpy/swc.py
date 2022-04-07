@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import time
 
 from .utils.io import saveswc
 from collections import Counter
@@ -7,6 +8,8 @@ from random import gauss
 from random import random
 from random import randrange
 from scipy.spatial.distance import cdist
+
+
 
 
 class SWC(object):
@@ -221,6 +224,120 @@ class SWC(object):
                 viewer.render(return_rgb_array=False)
             except KeyboardInterrupt:
                 break
+
+
+    def swc_to_dicts(self):
+        # Create connectivity dictionary
+        swc_dict = {}
+        swc_children = {}
+        swc_indices = {}
+        for ii, line in enumerate(self._data):
+            SampleID, ParentID = (line[0], line[-1])
+
+            swc_dict[SampleID] = ParentID
+            swc_indices[SampleID] = ii
+
+            # As we're iterating over the SWC anyways, we might as well
+            # retrieve the children too.
+            if ParentID not in swc_children:
+                swc_children[ParentID] = []
+
+            swc_children[ParentID].append(SampleID)
+
+        swc_ends = []
+        for SampleID, ParentID in swc_dict.items():
+            if SampleID not in swc_children:
+                swc_ends.append(SampleID)
+
+        return swc_dict, swc_children, swc_ends, swc_indices
+
+    def get_all_segments(self):
+        swc_dict, swc_children, swc_ends, swc_indices = self.swc_to_dicts()
+
+        segment_maps = []
+        for end in swc_ends:
+            segment = [swc_indices[end]]
+            SampleID = end
+            ParentID = swc_dict[SampleID]
+
+            while (SampleID != ParentID) and (ParentID in swc_dict):
+                SampleID = swc_dict.pop(SampleID)
+                ParentID = swc_dict[SampleID]
+                segment.append(swc_indices[SampleID]) # Segments consist of INDICES in original SWC
+
+            segment.append(swc_indices[ParentID])
+            segment_maps.append(segment)
+
+        return segment_maps
+
+    def swc_to_actors(self):
+        from vtkmodules.vtkCommonColor import vtkNamedColors
+        from vtkmodules.vtkCommonCore import vtkPoints
+        from vtkmodules.vtkCommonDataModel import (
+            vtkCellArray,
+            vtkLine,
+            vtkPolyData
+        )
+        from vtkmodules.vtkRenderingCore import (
+            vtkActor,
+            vtkPolyDataMapper
+        )
+
+        # Create the polydata where we will store all the geometric data
+        # https://stackoverflow.com/questions/17547851/create-vtkpolydata-object-from-list-with-tuples-in-python
+        # https://kitware.github.io/vtk-examples/site/Python/GeometricObjects/LongLine/
+
+        # Compute the center of mass
+        center = self._data[:, 2:5].mean(axis=0)
+        translated = self._data[:, 2:5] - \
+                     np.tile(center, (self._data.shape[0], 1))
+
+        # Get the dictionaries outlining the connectivities. From these, compute the indecies that map to segments
+        start = time.time()
+        segment_maps = self.get_all_segments()
+        segment_points = []
+        for map in segment_maps:
+            segment_points.append(self._data[map, 2:5])
+        print(f'Segmenting SWC into {len(segment_maps)} branches took: {(time.time() - start)*1E3} ms')
+
+        # Using the index map, plot each branch:
+
+        actors = []
+        for point_set in segment_points:
+            points = vtkPoints()
+
+            for point in point_set:
+                points.InsertNextPoint(point)
+
+            lines = vtkCellArray()
+            for ii in range(len(point_set)-1):
+                line = vtkLine()
+                line.GetPointIds().SetId(0, ii)
+                line.GetPointIds().SetId(1, ii+1)
+                lines.InsertNextCell(line)
+
+            # Create a polydata to store everything in
+            linesPolyData = vtkPolyData()
+
+            # Add the points to the dataset
+            linesPolyData.SetPoints(points)
+
+            # Add the lines to the dataset
+            linesPolyData.SetLines(lines)
+
+            # Setup color, actor and mapper
+            colors = vtkNamedColors()
+            mapper = vtkPolyDataMapper()
+            mapper.SetInputData(linesPolyData)
+
+            actor = vtkActor()
+            actor.SetMapper(mapper)
+            actor.GetProperty().SetLineWidth(4)
+            actor.GetProperty().SetColor(colors.GetColor3d('Peacock'))
+
+            actors.append(actor)
+        return actors
+
 
     def as_image(self, **kwargs):
         """Exports SWC data as 2D image.

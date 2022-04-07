@@ -9,7 +9,7 @@ from mpl_toolkits.axes_grid1.inset_locator import (InsetPosition)
 import SimpleITK as sitk
 
 from rivuletpy.utils.io import loadtiff3d
-from rivuletpy.utils.volume_rendering_vtk import volume_show
+from rivuletpy.utils.plottools import volume_show, volume_view
 
 plt.style.use('dark_background')
 

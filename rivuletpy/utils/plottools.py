@@ -1,13 +1,15 @@
 import numpy as np
 import SimpleITK as sitk
 
+from rivuletpy.swc import SWC
 from rivuletpy.utils.volume_rendering_vtk import (volumeRender, vtk_create_renderer, set_camera,
                                                   vtk_show, vtk_basic, get_tf)
 
 
 def imshow_flatten(ax, image: np.ndarray, **kwargs):
     if image.ndim == 3:  # Z stack
-        flat_image = np.max(image, axis=0)
+        z_axis_guess = np.argmin(image.shape)
+        flat_image = np.max(image, axis=z_axis_guess)
     elif image.ndim == 2:
         flat_image = image
     else:
@@ -16,12 +18,22 @@ def imshow_flatten(ax, image: np.ndarray, **kwargs):
     ax.imshow(flat_image, **kwargs)
 
 
-def volume_view(img, labeled=False):
-    data = sitk.GetArrayFromImage(img)
+def volume_view(*args, labeled=False):
+    # TODO: Need to flip either image or SWC. SWC is probably the wisest here.
+    actor_list = []
+    for arg in args:
+        if type(arg) is sitk.Image:
+            img = arg
+            data = sitk.GetArrayFromImage(img)
+            tf = get_tf(data)
 
-    tf = get_tf(data)
+            actor = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
+            actor_list = actor_list + actor
 
-    actor_list = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
+        if type(arg) is SWC:
+            swc = arg
+            actors = swc.swc_to_actors()
+            actor_list = actor_list + actors
 
     vtk_basic(actor_list)
 
@@ -39,3 +51,12 @@ def volume_show(img, labeled=False, w=400, h=300, pos=None, az=None, el=None, up
 
     img = vtk_show(ren)
     return img
+
+def swc_view(swc):
+    data = sitk.GetArrayFromImage(img)
+
+    tf = get_tf(data)
+
+    actor_list = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
+
+    vtk_basic(actor_list)
