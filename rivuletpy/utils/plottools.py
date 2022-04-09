@@ -45,7 +45,7 @@ def get_actors_from_args(args, labeled):
 
         if type(arg) is SWC:
             swc = arg
-            actors = swc.swc_to_actors()
+            actors = swc.swc_to_actors(offset=swc_Z_offset)
             actor_list = actor_list + actors
 
     return actor_list
