@@ -18,13 +18,14 @@ def imshow_flatten(ax, image: np.ndarray, **kwargs):
     ax.imshow(flat_image, **kwargs)
 
 
-def volume_view(*args, labeled=False):
-    # TODO: Need to flip either image or SWC. SWC is probably the wisest here.
+def volume_view(*args, labeled=False, swc_Z_offset=None):
     actor_list = []
     for arg in args:
         if type(arg) is sitk.Image:
             img = arg
             data = sitk.GetArrayFromImage(img)
+            print(data.shape)
+            data = np.flip(data, axis=1)
             tf = get_tf(data)
 
             actor = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
@@ -32,7 +33,7 @@ def volume_view(*args, labeled=False):
 
         if type(arg) is SWC:
             swc = arg
-            actors = swc.swc_to_actors()
+            actors = swc.swc_to_actors(offset=swc_Z_offset)
             actor_list = actor_list + actors
 
     vtk_basic(actor_list)
