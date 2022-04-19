@@ -10,7 +10,7 @@ from rivuletpy.utils.io import loadswc
 from rivuletpy.utils.plottools import imshow_flatten
 from rivuletpy.utils.plottools import volume_show, volume_view, swc_view
 
-FILENAME = 'data/Synthetic-no-bg.tif'
+FILENAME = 'data/Image5.v3dpbd.tif'
 FORCE = False  # Force recalculation of SWC
 
 if __name__ == '__main__':
@@ -35,6 +35,6 @@ if __name__ == '__main__':
     # s.as_image(ax=ax[2])
     # ax[2].set_title('SWC')
 
-    volume_view(s, image)
+    volume_view(s, image, swc_Z_offset=10)
 
     fig.show()

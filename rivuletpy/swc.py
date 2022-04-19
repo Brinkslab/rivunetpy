@@ -270,7 +270,7 @@ class SWC(object):
 
         return segment_maps
 
-    def swc_to_actors(self):
+    def swc_to_actors(self, thickness=1.0, offset=None):
         from vtkmodules.vtkCommonColor import vtkNamedColors
         from vtkmodules.vtkCommonCore import vtkPoints
         from vtkmodules.vtkCommonDataModel import (
@@ -307,6 +307,8 @@ class SWC(object):
             points = vtkPoints()
 
             for point in point_set:
+                if offset is not None:
+                    point = (point[0], point[1], point[2]+offset)
                 points.InsertNextPoint(point)
 
             lines = vtkCellArray()
@@ -332,7 +334,7 @@ class SWC(object):
 
             actor = vtkActor()
             actor.SetMapper(mapper)
-            actor.GetProperty().SetLineWidth(4)
+            actor.GetProperty().SetLineWidth(4*thickness)
             actor.GetProperty().SetColor(colors.GetColor3d('Peacock'))
 
             actors.append(actor)
