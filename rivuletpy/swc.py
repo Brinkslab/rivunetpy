@@ -44,7 +44,7 @@ class SWC(object):
 
             if i == len(branch.pts) - 1:  # The end of this branch
                 pid = self._data[pidx, 0] if pidx is not None else -2
-                if pid is not -2 and pid != 0 and self._data.shape[0] != 1:
+                if pid != -2 and pid != 0 and self._data.shape[0] != 1:
                     # Its connected node is fork point
                     self._data[self._data[:, 0] == pid, 1] = 5
             else:
@@ -60,7 +60,7 @@ class SWC(object):
         # Check if any tail should be connected to its tail
         tail = new_branch[0]
         matched, minidx = self.match(tail[2:5], tail[5])
-        if matched and self._data[minidx, 6] is -2:
+        if matched and self._data[minidx, 6] == -2:
             self._data[minidx, 6] = tail[0]
 
         self._data = np.vstack((self._data, new_branch))
@@ -82,7 +82,7 @@ class SWC(object):
                     break
                 branch.append(node)
                 parentid = node[6]
-                if childctr[parentid] is not 1:
+                if childctr[parentid] != 1:
                     break  # merged / unconnected
                 nodeid = parentid
 

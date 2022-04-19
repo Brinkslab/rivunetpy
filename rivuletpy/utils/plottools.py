@@ -6,7 +6,11 @@ from rivuletpy.utils.volume_rendering_vtk import (volumeRender, vtk_create_rende
                                                   vtk_show, vtk_basic, get_tf)
 
 
-def imshow_flatten(ax, image: np.ndarray, **kwargs):
+def flatten(image):
+
+    if type(image) is sitk.Image:
+        image = sitk.GetArrayFromImage(image)
+
     if image.ndim == 3:  # Z stack
         z_axis_guess = np.argmin(image.shape)
         flat_image = np.max(image, axis=z_axis_guess)
@@ -15,16 +19,25 @@ def imshow_flatten(ax, image: np.ndarray, **kwargs):
     else:
         raise TypeError('Expected an image with either 2 or 3 dimensions (Z Stack) '
                         f'but got an image of {image.ndim} dimensions of shape {image.shape}')
-    ax.imshow(flat_image, **kwargs)
+    return flat_image
 
-
-def volume_view(*args, labeled=False):
-    # TODO: Need to flip either image or SWC. SWC is probably the wisest here.
+def get_actors_from_args(args, labeled):
     actor_list = []
+
+    num_images = 0
+    for arg in args:
+        if type(arg) is sitk.Image:
+            num_images += 1
+    if not len(labeled) == num_images:
+        raise ValueError('Expected labeled keyword argument to contain an equal amount '
+                        'True/Falses as there are input images.')
+
     for arg in args:
         if type(arg) is sitk.Image:
             img = arg
             data = sitk.GetArrayFromImage(img)
+            # TODO: Need to flip either image or SWC. SWC is probably the wisest here.
+            data = np.flip(data, axis=1)
             tf = get_tf(data)
 
             actor = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
@@ -35,15 +48,17 @@ def volume_view(*args, labeled=False):
             actors = swc.swc_to_actors()
             actor_list = actor_list + actors
 
+    return actor_list
+
+def volume_view(*args, labeled=[]):
+
+    actor_list = get_actors_from_args(args, labeled)
+
     vtk_basic(actor_list)
 
 
-def volume_show(img, labeled=False, w=400, h=300, pos=None, az=None, el=None, up=None, foc=None):
-    data = sitk.GetArrayFromImage(img)  #
-
-    tf = get_tf(data)
-
-    actor_list = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
+def volume_show(*args, labeled=[], w=400, h=300, pos=None, az=None, el=None, up=None, foc=None):
+    actor_list = get_actors_from_args(args, labeled)
 
     ren, renWin, iren = vtk_create_renderer(actor_list, light_follows=False)
 

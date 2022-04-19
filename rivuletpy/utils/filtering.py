@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 from skimage.filters import threshold_otsu
 from skimage import data, restoration, util
@@ -17,6 +19,9 @@ THRESHOLD_OPTIONS = {'Otsu': sitk.OtsuThresholdImageFilter,
 
 
 def rolling_ball_removal(img):
+    img = copy.copy(img)
+    img = sitk.GetArrayFromImage(img)
+
     background = np.zeros_like(img)
 
     if img.ndim == 3:  # Z stack
@@ -32,20 +37,20 @@ def rolling_ball_removal(img):
                         f'but got an image of {img.ndim} dimensions of shape {img.shape}')
 
     filtered_img = img - background
+    filtered_img = sitk.GetImageFromArray(img, isVector=False)
     return filtered_img
 
 
-def get_threshold_value(image, mthd='Otsu'):
-    img = np.copy(image)
+def apply_threshold(img, mthd='Otsu'):
+    img = copy.copy(img)
     if mthd not in THRESHOLD_OPTIONS:
         raise ValueError(f'Invalid method keyword: {mthd}, please use one of the following options: \n'
                          f'{THRESHOLD_OPTIONS}')
 
-    img = sitk.GetImageFromArray(img, isVector=False)
     filter = THRESHOLD_OPTIONS[mthd]()
     filter.SetInsideValue(0)
     filter.SetOutsideValue(1)
     binary = filter.Execute(img)
     threshold = filter.GetThreshold()
 
-    return int(threshold)
+    return binary, int(threshold)

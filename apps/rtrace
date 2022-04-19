@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 import argparse
-from rivuletpy.rtrace import main
+from rivuletpy.rtrace import main, show_logo
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(

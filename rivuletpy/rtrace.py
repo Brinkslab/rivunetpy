@@ -7,7 +7,7 @@ import SimpleITK as sitk
 
 from rivuletpy.trace import R2Tracer
 from rivuletpy.utils.io import loadimg, crop, swc2world, swc2vtk
-from rivuletpy.utils.filtering import get_threshold_value
+from rivuletpy.utils.filtering import apply_threshold
 from rivuletpy.trace import estimate_radius
 import matplotlib.pyplot as plt
 from rivuletpy.utils.plottools import imshow_flatten
@@ -37,9 +37,9 @@ def main(file=None, out=None, threshold=0, zoom_factor=1, save_soma=False,
     imgmax = img.max()
 
     if threshold is None:
-        threshold = get_threshold_value(img)
+        _, threshold = apply_threshold(img)
     elif type(threshold) is str:
-        threshold = get_threshold_value(img, mthd=threshold)
+        _, threshold = apply_threshold(img, mthd=threshold)
 
     if not silent:
         print('The shape of the image is', img.shape)
