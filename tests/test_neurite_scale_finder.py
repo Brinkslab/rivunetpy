@@ -11,7 +11,7 @@ import SimpleITK as sitk
 from rivuletpy.utils.io import loadtiff3d
 from rivuletpy.utils.plottools import volume_show, volume_view, flatten
 from rivuletpy.utils.filtering import apply_threshold, rolling_ball_removal
-from rivuletpy.utils.segmentation import get_soma_scale
+from rivuletpy.utils.segmentation import NeuronSegmentor
 
 plt.style.use('dark_background')
 
@@ -22,19 +22,13 @@ fig = plt.figure(figsize=(10, 5))
 img = loadtiff3d(filename, out='SITK') # Original Image
 
 binary, threshold = apply_threshold(img)
+#
+# start = time.time()
 
-start = time.time()
-scale = get_soma_scale(img, fast=True)
+neurons = NeuronSegmentor(img)
 
-fig = plt.figure(figsize=(10, 5), dpi=300)
+print(neurons)
 
-ax = fig.add_subplot(1, 2, 1)
-plt.title('Threshold')
-plt.imshow(flatten(binary), cmap='gray')
-plt.colorbar()
+pass
 
-ax = fig.add_subplot(1, 2, 2)
-plt.title('Labels')
-plt.imshow(flatten(binary), cmap='gray')
-plt.colorbar()
 

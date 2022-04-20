@@ -40,28 +40,7 @@ binary, threshold = apply_threshold(img)
 start = time.time()
 scale = get_soma_scale(img, fast=True)
 
-gaussian_filter = sitk.DiscreteGaussianImageFilter()
-gaussian_filter.SetUseImageSpacing(False)
-gaussian_filter.SetVariance(scale ** 2)  # Sigma = Var^2
-img_blurred = gaussian_filter.Execute(img)
-img_blurred = sitk.Cast(img_blurred, sitk.sitkFloat32)
 
-frangi_filter = sitk.ObjectnessMeasureImageFilter()
-# frangi_filter.SetScaleObjectnessMeasure(...)
-frangi_filter.SetObjectDimension(0)
-frangi = frangi_filter.Execute(img_blurred)
-frangi = sitk.Cast(frangi, sitk.sitkUInt16)
-
-blobs = frangi > 0
-
-label_image = sitk.ConnectedComponent(blobs)
-stats = sitk.LabelIntensityStatisticsImageFilter()
-stats.Execute(label_image, img)
-
-soma_seeds = []
-for label in stats.GetLabels():
-    cent = np.array(stats.GetCentroid(label)).astype(int).tolist()
-    soma_seeds.append(tuple(cent))
 
 
 img_float = sitk.Cast(img, sitk.sitkFloat32)

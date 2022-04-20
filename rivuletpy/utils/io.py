@@ -67,7 +67,7 @@ def loadimg(file, target_resolution, ):
 
 def loadtiff3d(filepath, out='Numpy'):
     """Load a tiff file into 3D numpy array"""
-    im = sitk.ReadImage(filepath, imageIO='TIFFImageIO')
+    im = sitk.ReadImage(filepath, sitk.sitkUInt16, imageIO='TIFFImageIO')
     if out == 'Numpy':
         im = sitk.GetArrayFromImage(im)
     elif out == 'SITK':
