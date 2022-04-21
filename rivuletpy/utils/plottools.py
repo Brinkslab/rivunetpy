@@ -6,14 +6,17 @@ from rivuletpy.utils.volume_rendering_vtk import (volumeRender, vtk_create_rende
                                                   vtk_show, vtk_basic, get_tf)
 
 
-def flatten(image):
+def flatten(image, whitebackground=False):
 
     if type(image) is sitk.Image:
         image = sitk.GetArrayFromImage(image)
 
     if image.ndim == 3:  # Z stack
         z_axis_guess = np.argmin(image.shape)
-        flat_image = np.max(image, axis=z_axis_guess)
+        if not whitebackground:
+            flat_image = np.max(image, axis=z_axis_guess)
+        else:
+            flat_image = np.min(image, axis=z_axis_guess)
     elif image.ndim == 2:
         flat_image = image
     else:

@@ -45,7 +45,7 @@ def apply_threshold(img, mthd='Otsu'):
     img = copy.copy(img)
     if mthd not in THRESHOLD_OPTIONS:
         raise ValueError(f'Invalid method keyword: {mthd}, please use one of the following options: \n'
-                         f'{THRESHOLD_OPTIONS}')
+                         f'{list(THRESHOLD_OPTIONS.keys())}')
 
     filter = THRESHOLD_OPTIONS[mthd]()
     filter.SetInsideValue(0)

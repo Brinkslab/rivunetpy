@@ -1,4 +1,5 @@
 import copy
+import time
 
 import numpy as np
 import SimpleITK as sitk
@@ -24,65 +25,29 @@ class NeuronSegmentor:
 
     def __init__(self, img):
         self.img = img
+        self.PixelID = self.img.GetPixelID()
+        self.binary, self.threshold = apply_threshold(self.img, mthd='Otsu')
         self.soma_scale = self.get_soma_scale()
         self.soma_seeds = self.get_soma_seeds()
         self.neurite_scale = self.get_neurite_scale()
+        self.get_global_mask()
 
     @staticmethod
-    def get_max_scale(img, thresh='Otsu', fast=True):
-        # This function is WAY too slow
-        binary, _ = apply_threshold(img, mthd=thresh)
+    def get_max_scale(binary):
+        distance_transform = sitk.SignedMaurerDistanceMapImageFilter()
+        # distance_transform.SetUseImageSpacing(False)
+        distance_transform.SetInsideIsPositive(True)
+        # distance_transform.SetBackgroundValue(1)
+        distance_transform.SetSquaredDistance(False)
+        distance_img = distance_transform.Execute(binary)
 
-        if fast:
-            distance_transform = sitk.SignedMaurerDistanceMapImageFilter()
-            # distance_transform.SetUseImageSpacing(False)
-            distance_transform.SetInsideIsPositive(True)
-            # distance_transform.SetBackgroundValue(1)
-            distance_transform.SetSquaredDistance(False)
-            distance_img = distance_transform.Execute(binary)
+        max_filter = sitk.MinimumMaximumImageFilter()
+        _ = max_filter.Execute(distance_img)
 
-            max_filter = sitk.MinimumMaximumImageFilter()
-            _ = max_filter.Execute(distance_img)
-
-            return int(max_filter.GetMaximum())
-        else:
-            erosions = 0
-
-            eroded = copy.copy(binary)
-            prev_eroded = eroded
-
-            intensities = [get_intensity(eroded)]
-            components = [-1]  # Dummy number that should never be physically possible
-
-            # dilate_filter = sitk.BinaryDilateImageFilter()
-            # dilate_filter.SetKernelRadius(1)
-            # dilate_filter.SetForegroundValue(1)
-
-            erode_filter = sitk.BinaryErodeImageFilter()
-            erode_filter.SetKernelRadius(1)
-            erode_filter.SetForegroundValue(1)
-
-            while True:
-                eroded = erode_filter.Execute(eroded)
-
-                intensities.append(get_intensity(eroded))
-
-                label_image = sitk.ConnectedComponent(eroded)
-                stats = sitk.LabelIntensityStatisticsImageFilter()
-                stats.Execute(label_image, img)
-                components.append(len(stats.GetLabels()))
-
-                if components[-1] == components[-2]:
-                    break
-                elif intensities[-1] == intensities[-2]:
-                    break  # Back-up exit for when component finding fails
-
-                erosions += 1
-
-        return erosions
+        return int(max_filter.GetMaximum())
 
     def get_soma_scale(self):
-        return self.get_max_scale(self.img, thresh='Otsu', fast=True)
+        return self.get_max_scale(self.binary)
 
     def get_soma_seeds(self):
         gaussian_filter = sitk.DiscreteGaussianImageFilter()
@@ -95,7 +60,7 @@ class NeuronSegmentor:
         # frangi_filter.SetScaleObjectnessMeasure(...)
         frangi_filter.SetObjectDimension(0)
         frangi = frangi_filter.Execute(img_blurred)
-        frangi = sitk.Cast(frangi, sitk.sitkUInt16)
+        frangi = sitk.Cast(frangi, self.PixelID)
 
         blobs = frangi > 0
 
@@ -157,7 +122,7 @@ class NeuronSegmentor:
 
         fig.show()
 
-    def get_rough_soma_cover(self):
+    def get_rough_soma_mask(self):
         # https://simpleitk.readthedocs.io/en/master/link_HelloWorld_docs.html
         pixelType = sitk.sitkUInt8
         imageSize = self.img.GetSize()
@@ -172,17 +137,44 @@ class NeuronSegmentor:
 
         # Apply the blobs to the image
         # image, _ = apply_threshold(image, mthd='Otsu')
-
+        print(len(self.soma_seeds))
         radius = self.soma_scale
         for seed in self.soma_seeds:
             if self.in_bounds(image, seed, radius):
                 image[seed[0] - radius:seed[0] + radius, \
                 seed[1] - radius:seed[1] + radius, \
                 seed[2] - radius:seed[2] + radius] = 1
+            else:
+                print(f'Thrown out seed {seed}, too close to border.')
 
-        x = sitk.GetArrayFromImage(image)
-        image = image < 0.5
         return image
+
+    def get_soma_mask(self, dilate=None, print_time=False):
+        if print_time:
+            start_time = time.time()
+
+        mask = sitk.ConfidenceConnected(self.img, seedList=self.soma_seeds.tolist(),
+                                        numberOfIterations=1,
+                                        multiplier=1,
+                                        initialNeighborhoodRadius=3,
+                                        replaceValue=1)
+        if dilate is not None:
+            if type(dilate) not in (int, bool):
+                raise ValueError('Expected dilate to be an integer representing the kernel' 
+                                 f'Radius for the dilation filter, instead got {dilate}' 
+                                 'Alternatively, pass True to automatically set size.')
+
+            if type(dilate) is bool:
+                dilate = self.soma_scale
+
+            dilate_filter = sitk.BinaryDilateImageFilter()
+            dilate_filter.SetKernelRadius(dilate)
+            dilate_filter.SetForegroundValue(1)
+            mask = dilate_filter.Execute(mask)
+
+        if print_time:
+            print(f'Got Soma Mask in {time.time() - start_time} s')
+        return mask
 
     @staticmethod
     def in_bounds(big_box_corners, small_box_center, small_box_radius):
@@ -197,8 +189,6 @@ class NeuronSegmentor:
         rr = small_box_radius
         small_box_corner_min = np.array([axval - rr for axval in small_box_center])
         small_box_corner_max = np.array([axval + rr for axval in small_box_center])
-        print(small_box_corner_min, small_box_corner_max)
-        print(big_box_corners)
 
         in_bounds_min = (big_box_corners[0, :] < small_box_corner_min).all()
         in_bounds_max = (big_box_corners[0, :] > small_box_corner_max).all()
@@ -206,13 +196,87 @@ class NeuronSegmentor:
         return in_bounds_min
 
     def get_neurite_scale(self):
-        binary = apply_threshold(self.img, mthd='Otsu')
-        mask = self.get_rough_soma_cover()
-        plt.imshow(flatten(mask), cmap='gray')
-        plt.colorbar()
-        plt.show()
+        mask = self.get_soma_mask(dilate=True, print_time=True)
+        mask = mask == 0 # Invert mask
+        mask = sitk.Cast(mask, self.img.GetPixelID())
 
-        return None
+        neurite_img = self.img * mask
+        binary, _ = apply_threshold(neurite_img, mthd='Max Entropy')
+
+        neurite_scale = self.get_max_scale(binary)
+        if neurite_scale < 1:
+            neurite_scale = 1
+
+        return neurite_scale
+
+    def frangi_filter(self):
+        # TODO: Make this multi-threaded/parallelized
+        # scales = [self.neurite_scale+1]
+        scales = np.arange(self.neurite_scale+1, self.soma_scale/2).astype(int)
+        print(f'Scales= {scales}')
+        img_shape = self.img.GetSize()
+        scales_stack_shape = (len(scales), img_shape[-1], *img_shape[:-1])
+
+        scales_stack = np.zeros(scales_stack_shape)
+
+        frangi_filter = sitk.ObjectnessMeasureImageFilter()
+        # frangi_filter.SetGamma(1)
+        frangi_filter.SetAlpha(0.75)
+        frangi_filter.SetBeta(0.75)
+        frangi_filter.SetBrightObject(True)
+        frangi_filter.SetScaleObjectnessMeasure(False)
+        frangi_filter.SetObjectDimension(1)
+
+        gaussian_filter = sitk.DiscreteGaussianImageFilter()
+        gaussian_filter.SetUseImageSpacing(False)
+
+        for ii, scale in enumerate(scales):
+
+            gaussian_filter.SetVariance(int(scale**2))  # Sigma = Var^2
+            img_blurred = gaussian_filter.Execute(self.img)
+            img_blurred = sitk.Cast(img_blurred, sitk.sitkFloat32)
+
+            frangi = frangi_filter.Execute(img_blurred)
+            # frangi = sitk.Cast(frangi, self.PixelID)
+
+            frangi_np = sitk.GetArrayFromImage(frangi)
+
+            scales_stack[ii] = frangi_np
+
+
+        scales_stack_max = np.max(scales_stack, axis=0)
+        scales_stack_max = sitk.GetImageFromArray(scales_stack_max)
+
+        return scales_stack_max
+
+    def get_global_mask(self):
+        frangi = self.frangi_filter()
+
+        # binary, _ = apply_threshold(frangi, mthd='Reyni Entropy')
+
+        vs_binary, _ = apply_threshold(self.img, mthd='Otsu')
+
+        mask = sitk.ConfidenceConnected(frangi, seedList=self.soma_seeds.tolist(),
+                                        numberOfIterations=3,
+                                        multiplier=1,
+                                        initialNeighborhoodRadius=self.soma_scale,
+                                        replaceValue=1)
+
+        # label_seg = sitk.ConnectedComponent(seg)
+
+        fig = plt.figure(figsize=(10, 5))
+        ax = fig.add_subplot(1, 2, 1)
+        plt.title('With filtering steps')
+        plt.imshow(flatten(mask), cmap='gray', interpolation='none')
+        plt.colorbar()
+
+        ax = fig.add_subplot(1, 2, 2)
+        plt.title('Simple threshold')
+        plt.imshow(flatten(frangi), cmap='gray', interpolation='none')
+        plt.colorbar()
+
+        plt.tight_layout()
+        plt.show()
 
     def __str__(self):
         return (f'Neuron(s) with \n\tSoma Scale = {self.soma_scale}\n'
