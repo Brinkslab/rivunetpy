@@ -1,6 +1,7 @@
 import copy
 import time
 
+from tqdm import tqdm
 import numpy as np
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
@@ -23,14 +24,105 @@ def distance(point1, point2):
 
 class NeuronSegmentor:
 
-    def __init__(self, img):
+    def __init__(self, img, save=False):
+        self.save = save
+
         self.img = img
         self.PixelID = self.img.GetPixelID()
         self.binary, self.threshold = apply_threshold(self.img, mthd='Otsu')
-        self.soma_scale = self.get_soma_scale()
-        self.soma_seeds = self.get_soma_seeds()
+
+        if self.save:
+            self.orig_global_mask = None
+            self.dil_global_mask = None
+
+        print('(A)\t Getting soma scale')
+        self.soma_scale = self.get_max_scale(self.binary)
+
+        print('(B)\t Getting soma seeds')
+        self.soma_seeds = self.get_seeds()
+
+        print('(C)\t Creating soma mask')
+        self.soma_mask = self.get_soma_mask()
+
+        print('(D)\t Creating neurite image')
+        self.neurite_img = self.get_neurite_img()
+
+        print('(E)\t Getting neurite scale')
         self.neurite_scale = self.get_neurite_scale()
-        self.get_global_mask()
+
+        print('(E)\t Getting filtered neurite image')
+        self.neurite_frangi = self.hessian_filter()
+
+        print('(G)\t Getting neurons')
+        self.neurons = self.get_components()
+
+    def plot_segmentation(self):
+        assert self.save, f'Plotting is only possible if {type(self).__name__} was initialized with save=True'
+
+        fig = plt.figure(figsize=(20, 10), dpi=200)
+
+        ax = fig.add_subplot(2, 5, 1)
+        plt.title('Original image')
+        plt.imshow(flatten(self.img), cmap='gray', interpolation='none')
+        # plt.colorbar()
+        plt.axis('off')
+
+        ax = fig.add_subplot(2, 5, 2)
+        shape = self.img.GetSize()
+        plt.title(f'{len(self.soma_seeds)} Unique seeds')
+        soma_seeds = np.array(self.soma_seeds)
+        plt.imshow(flatten(self.img), cmap='gray', interpolation='none', extent=[0, shape[0], 0, shape[1]])
+        x = soma_seeds[:, 0]
+        y = shape[0] - soma_seeds[:, 1]
+        plt.plot(x, y, color='red', marker='x', markersize=20, linestyle='none')
+        plt.axis('square')
+        plt.axis('off')
+
+        ax = fig.add_subplot(2, 5, 3)
+        plt.title('Soma mask')
+        plt.imshow(flatten(self.soma_mask), cmap='gray', interpolation='none')
+        plt.axis('off')
+
+        ax = fig.add_subplot(2, 5, 4)
+        plt.title(f'Neurites only, size={self.neurite_scale} px')
+        plt.imshow(flatten(self.neurite_img), cmap='gray', interpolation='none')
+        plt.axis('off')
+
+
+        ax = fig.add_subplot(2, 5, 5)
+        plt.title('Frangi')
+        plt.imshow(flatten(self.neurite_frangi), cmap='gray', interpolation='none')
+        plt.axis('off')
+
+        ax = fig.add_subplot(2, 5, 6)
+        shape = self.img.GetSize()
+        plt.title(f'{len(self.neurite_seeds)} Unique seeds')
+        neurite_seeds = np.array(self.neurite_seeds)
+        plt.imshow(flatten(self.img), cmap='gray', interpolation='none', extent=[0, shape[0], 0, shape[1]])
+        x = neurite_seeds[:, 0]
+        y = shape[0] - neurite_seeds[:, 1]
+        plt.plot(x, y, color='blue', marker='x', markersize=20, linestyle='none')
+        plt.axis('square')
+        plt.axis('off')
+
+        ax = fig.add_subplot(2, 5, 7)
+        plt.title('Combined mask')
+        plt.imshow(flatten(self.orig_global_mask), cmap='gray', interpolation='none')
+        plt.axis('off')
+        plt.colorbar()
+
+        ax = fig.add_subplot(2, 5, 8)
+        plt.title('Dilated mask')
+        plt.imshow(flatten(self.dil_global_mask), cmap='gray', interpolation='none')
+        plt.axis('off')
+
+        ax = fig.add_subplot(2, 5, 10)
+        plt.title('Labeled neurons')
+        plt.imshow(flatten(self.neurons), cmap='nipy_spectral', interpolation='none')
+        plt.axis('off')
+
+        plt.tight_layout()
+        plt.show()
 
     @staticmethod
     def get_max_scale(binary):
@@ -46,19 +138,56 @@ class NeuronSegmentor:
 
         return int(max_filter.GetMaximum())
 
-    def get_soma_scale(self):
-        return self.get_max_scale(self.binary)
+    def get_seeds(self):
 
-    def get_soma_seeds(self):
+        blobs = self.hessian_filter(self.img, [self.soma_scale], dimension=0, scale=True)
+
+        #blobs, _ = apply_threshold(blobs, mthd='Moments')
+
+        plt.imshow(flatten(blobs), cmap='gray', interpolation='none')
+        plt.colorbar()
+        plt.show()
+
+        blobs = sitk.Cast(blobs, self.PixelID)
+
+
+
+        label_image = sitk.ConnectedComponent(blobs)
+        stats = sitk.LabelIntensityStatisticsImageFilter()
+        stats.Execute(label_image, self.img)
+
+        seeds = []
+        for label in stats.GetLabels():
+            cent = np.array(stats.GetCentroid(label)).astype(int).tolist()
+            seeds.append(tuple(cent))
+
+        # fig = plt.figure()
+        # ax = fig.add_subplot(1, 1, 1)
+        # shape = self.img.GetSize()
+        # plt.title(f'{len(self.soma_seeds)} Unique seeds')
+        # soma_seeds = np.array(self.soma_seeds)
+        # plt.imshow(flatten(self.img), cmap='gray', interpolation='none', extent=[0, shape[0], 0, shape[1]])
+        # x = soma_seeds[:, 0]
+        # y = shape[0] - soma_seeds[:, 1]
+        # plt.plot(x, y, color='red', marker='x', markersize=20, linestyle='none')
+        # plt.axis('square')
+        # plt.axis('off')
+        # plt.show()
+
+
+        return self.prune_seeds(seeds, self.soma_scale)
+
+    def get_seeds_old(self, img, scale, dimension=0):
+
         gaussian_filter = sitk.DiscreteGaussianImageFilter()
         gaussian_filter.SetUseImageSpacing(False)
-        gaussian_filter.SetVariance(self.soma_scale ** 2)  # Sigma = Var^2
-        img_blurred = gaussian_filter.Execute(self.img)
+        gaussian_filter.SetVariance(scale ** 2)  # Sigma = Var^2
+        img_blurred = gaussian_filter.Execute(img)
         img_blurred = sitk.Cast(img_blurred, sitk.sitkFloat32)
 
         frangi_filter = sitk.ObjectnessMeasureImageFilter()
         # frangi_filter.SetScaleObjectnessMeasure(...)
-        frangi_filter.SetObjectDimension(0)
+        frangi_filter.SetObjectDimension(dimension)
         frangi = frangi_filter.Execute(img_blurred)
         frangi = sitk.Cast(frangi, self.PixelID)
 
@@ -68,59 +197,41 @@ class NeuronSegmentor:
         stats = sitk.LabelIntensityStatisticsImageFilter()
         stats.Execute(label_image, self.img)
 
-        soma_seeds = []
+        seeds = []
         for label in stats.GetLabels():
             cent = np.array(stats.GetCentroid(label)).astype(int).tolist()
-            soma_seeds.append(tuple(cent))
-        return self.prune_soma_seeds(soma_seeds)
+            seeds.append(tuple(cent))
 
-    def prune_soma_seeds(self, seeds):
+        return self.prune_seeds(seeds, scale)
+
+    @staticmethod
+    def prune_seeds(seeds, radius):
         valid_seeds = copy.copy(seeds)
+        init_seeds = len(valid_seeds)  # Initial number of seeds
 
-        ii = 0
-        while True:
-            if ii == len(valid_seeds):
-                break
+        with tqdm(total=init_seeds) as pbar:
+            ii = 0
+            while True:
+                if ii == len(valid_seeds):
+                    break
 
-            seed = valid_seeds[ii]
-            kill_indices = []
-            for jj, compared_seed in enumerate(valid_seeds):
-                if ii == jj:
-                    pass
-                else:
-                    delta = distance(seed, compared_seed)
-                    if delta < self.soma_scale * 2:  # Soma scale is a radius
-                        kill_indices.append(jj)
-            valid_seeds = np.delete(valid_seeds, kill_indices, axis=0)
+                seed = valid_seeds[ii]
+                kill_indices = []
+                for jj, compared_seed in enumerate(valid_seeds):
+                    if ii == jj:
+                        pass
+                    else:
+                        delta = distance(seed, compared_seed)
+                        if delta < radius * 2:  # Scale is a radius
+                            kill_indices.append(jj)
+                valid_seeds = np.delete(valid_seeds, kill_indices, axis=0)
 
-            ii += 1
+                ii += 1
+                pbar.update(1)
 
-        # self.plot_pruning(seeds, valid_seeds)
+            pbar.update(init_seeds-ii)  # Finish up loading bar
+
         return valid_seeds
-
-    def plot_pruning(self, seeds, seeds_after):
-
-        fig = plt.figure(figsize=(10, 3))
-
-        ax = fig.add_subplot(1, 3, 1)
-        plt.plot(np.array(seeds)[:, 0], np.array(seeds)[:, 1], 'ro')
-        plt.axis('square')
-        plt.xlim(0, self.img.GetSize()[1])
-        plt.ylim(self.img.GetSize()[0], 0)
-        plt.title(f'N={len(np.array(seeds)[:, 0])}')
-
-        ax = fig.add_subplot(1, 3, 2)
-        plt.plot(np.array(seeds_after)[:, 0], np.array(seeds_after)[:, 1], 'bo')
-        plt.axis('square')
-        plt.xlim(0, self.img.GetSize()[1])
-        plt.ylim(self.img.GetSize()[0], 0)
-        plt.title(f'N={len(np.array(seeds_after)[:, 0])}')
-
-        ax = fig.add_subplot(1, 3, 3)
-        plt.imshow(flatten(self.img), cmap='gray')
-        plt.colorbar()
-
-        fig.show()
 
     def get_rough_soma_mask(self):
         # https://simpleitk.readthedocs.io/en/master/link_HelloWorld_docs.html
@@ -149,19 +260,19 @@ class NeuronSegmentor:
 
         return image
 
-    def get_soma_mask(self, dilate=None, print_time=False):
+    def get_soma_mask(self, dilate=True, print_time=False):
         if print_time:
             start_time = time.time()
 
         mask = sitk.ConfidenceConnected(self.img, seedList=self.soma_seeds.tolist(),
                                         numberOfIterations=1,
                                         multiplier=1,
-                                        initialNeighborhoodRadius=3,
+                                        initialNeighborhoodRadius=1,
                                         replaceValue=1)
         if dilate is not None:
             if type(dilate) not in (int, bool):
-                raise ValueError('Expected dilate to be an integer representing the kernel' 
-                                 f'Radius for the dilation filter, instead got {dilate}' 
+                raise ValueError('Expected dilate to be an integer representing the kernel'
+                                 f'Radius for the dilation filter, instead got {dilate}'
                                  'Alternatively, pass True to automatically set size.')
 
             if type(dilate) is bool:
@@ -195,13 +306,17 @@ class NeuronSegmentor:
 
         return in_bounds_min
 
-    def get_neurite_scale(self):
-        mask = self.get_soma_mask(dilate=True, print_time=True)
-        mask = mask == 0 # Invert mask
+    def get_neurite_img(self):
+        mask = self.soma_mask
+
+        mask = mask == 0  # Invert mask
         mask = sitk.Cast(mask, self.img.GetPixelID())
 
         neurite_img = self.img * mask
-        binary, _ = apply_threshold(neurite_img, mthd='Max Entropy')
+        return neurite_img
+
+    def get_neurite_scale(self):
+        binary, _ = apply_threshold(self.neurite_img, mthd='Max Entropy')
 
         neurite_scale = self.get_max_scale(binary)
         if neurite_scale < 1:
@@ -210,73 +325,113 @@ class NeuronSegmentor:
         return neurite_scale
 
     def frangi_filter(self):
-        # TODO: Make this multi-threaded/parallelized
-        # scales = [self.neurite_scale+1]
-        scales = np.arange(self.neurite_scale+1, self.soma_scale/2).astype(int)
-        print(f'Scales= {scales}')
-        img_shape = self.img.GetSize()
-        scales_stack_shape = (len(scales), img_shape[-1], *img_shape[:-1])
+        scales = np.arange(self.neurite_scale + 1, self.soma_scale / 2).astype(int)
+        return self.hessian_filter(self.img, scales, dimension=1)
 
-        scales_stack = np.zeros(scales_stack_shape)
+    def hessian_filter(self, img, scales, dimension=0, scale=False):
+        # TODO: Make this multi-threaded/parallelized
+
 
         frangi_filter = sitk.ObjectnessMeasureImageFilter()
         # frangi_filter.SetGamma(1)
         frangi_filter.SetAlpha(0.75)
         frangi_filter.SetBeta(0.75)
         frangi_filter.SetBrightObject(True)
-        frangi_filter.SetScaleObjectnessMeasure(False)
-        frangi_filter.SetObjectDimension(1)
+        frangi_filter.SetScaleObjectnessMeasure(scale)
+        frangi_filter.SetObjectDimension(dimension)
 
         gaussian_filter = sitk.DiscreteGaussianImageFilter()
         gaussian_filter.SetUseImageSpacing(False)
 
-        for ii, scale in enumerate(scales):
+        images = []
 
-            gaussian_filter.SetVariance(int(scale**2))  # Sigma = Var^2
-            img_blurred = gaussian_filter.Execute(self.img)
+        for ii, scale in tqdm(enumerate(scales)):
+            gaussian_filter.SetVariance(int(scale ** 2))  # Sigma = Var^2
+            img_blurred = gaussian_filter.Execute(img)
             img_blurred = sitk.Cast(img_blurred, sitk.sitkFloat32)
 
             frangi = frangi_filter.Execute(img_blurred)
             # frangi = sitk.Cast(frangi, self.PixelID)
 
-            frangi_np = sitk.GetArrayFromImage(frangi)
+            images.append(frangi)
 
-            scales_stack[ii] = frangi_np
+        return self.max_between_stacks(images)
 
+    @staticmethod
+    def max_between_stacks(*images):
+        if len(images) == 1 and type(images[0]) is list: # Allow for both list and multiple args input
+            images = images[0]
 
-        scales_stack_max = np.max(scales_stack, axis=0)
-        scales_stack_max = sitk.GetImageFromArray(scales_stack_max)
+        img_shapes = []
+        img_types = []
+        img: Image
+        for img in images:
+            assert type(img) is Image, ('Input image should by of the SimpleITK.SimpleITK.Image type, \n'
+                                        f'instead is {type(img)}')
+            img_shapes.append(img.GetSize())
+            img_types.append(img.GetPixelID())
 
-        return scales_stack_max
+        assert len(set(img_shapes)) == 1, 'All the input images should have the same shape'
+        assert len(set(img_types)) == 1, 'All the input images should have the same types'
 
-    def get_global_mask(self):
-        frangi = self.frangi_filter()
+        img_shape = img_shapes[0]
+        stack_shape = (len(images), img_shape[-1], *img_shape[:-1])
 
-        # binary, _ = apply_threshold(frangi, mthd='Reyni Entropy')
+        print(f'Single image has shape: {img_shape}, stack has shape: {stack_shape}')
 
-        vs_binary, _ = apply_threshold(self.img, mthd='Otsu')
+        stack = np.zeros(stack_shape)
+
+        for ii, img in enumerate(images):
+            arr_buffer = sitk.GetArrayFromImage(img)
+            stack[ii] = arr_buffer
+            print(f'Added image {ii} to stack')
+
+        stack_max = np.max(stack, axis=0)
+        stack_max = sitk.GetImageFromArray(stack_max)
+
+        stack_max = sitk.Cast(stack_max, int(img_types[0]))
+        return stack_max
+
+    def get_components(self):
+        frangi = self.neurite_frangi
+
+        if self.save:
+            self.neurite_frangi = frangi
 
         mask = sitk.ConfidenceConnected(frangi, seedList=self.soma_seeds.tolist(),
-                                        numberOfIterations=3,
+                                        numberOfIterations=10,
                                         multiplier=1,
-                                        initialNeighborhoodRadius=self.soma_scale,
+                                        initialNeighborhoodRadius=1,
                                         replaceValue=1)
 
-        # label_seg = sitk.ConnectedComponent(seg)
+        # threshold_filter = sitk.ConnectedThresholdImageFilter
 
-        fig = plt.figure(figsize=(10, 5))
-        ax = fig.add_subplot(1, 2, 1)
-        plt.title('With filtering steps')
-        plt.imshow(flatten(mask), cmap='gray', interpolation='none')
-        plt.colorbar()
+        print('Finished getting mask')
 
-        ax = fig.add_subplot(1, 2, 2)
-        plt.title('Simple threshold')
-        plt.imshow(flatten(frangi), cmap='gray', interpolation='none')
-        plt.colorbar()
+        # global_mask = self.max_between_stacks(mask, self.soma_mask)
+        global_mask = mask
 
-        plt.tight_layout()
-        plt.show()
+        print('Finished getting maxima')
+
+        if self.save:
+            self.orig_global_mask = global_mask
+
+        dilate_filter = sitk.BinaryDilateImageFilter()
+        dilate_filter.SetKernelRadius(self.neurite_scale)
+        dilate_filter.SetForegroundValue(1)
+
+        global_mask = dilate_filter.Execute(global_mask)
+
+        print('Finished dilation')
+
+        if self.save:
+            self.dil_global_mask = global_mask
+
+        components = sitk.ConnectedComponent(global_mask)
+
+        print('Finished getting components')
+
+        return components
 
     def __str__(self):
         return (f'Neuron(s) with \n\tSoma Scale = {self.soma_scale}\n'

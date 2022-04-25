@@ -13,23 +13,25 @@ from rivuletpy.utils.plottools import volume_show, volume_view, flatten
 from rivuletpy.utils.filtering import apply_threshold, rolling_ball_removal
 from rivuletpy.utils.segmentation import NeuronSegmentor
 
-plt.style.use('dark_background')
 
-filename = 'data/Synthetic-no-bg.tif'
+if __name__ == '__main__':
 
-fig = plt.figure(figsize=(10, 5))
+    plt.style.use('dark_background')
 
-img = loadtiff3d(filename, out='SITK') # Original Image
-
-binary, threshold = apply_threshold(img)
-#
-# start = time.time()
-
-neurons = NeuronSegmentor(img)
-
-print(neurons)
+    filename = 'data/Synthetic-no-bg.tif'
 
 
-pass
+    img = loadtiff3d(filename, out='SITK') # Original Image
+
+    binary, threshold = apply_threshold(img)
+    #
+    # start = time.time()
+
+    neurons = NeuronSegmentor(img, save=True)
+    neurons.plot_segmentation()
+
+    print(neurons)
+
+    pass
 
 
