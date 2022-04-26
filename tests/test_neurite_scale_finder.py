@@ -20,18 +20,16 @@ if __name__ == '__main__':
 
     filename = 'data/Synthetic-no-bg.tif'
 
-
     img = loadtiff3d(filename, out='SITK') # Original Image
 
-    binary, threshold = apply_threshold(img)
+    # binary, threshold = apply_threshold(img, mthd='Max Entropy')
     #
     # start = time.time()
 
     neurons = NeuronSegmentor(img, save=True)
-    neurons.plot_segmentation()
+    neurons.plot()
 
     print(neurons)
-
     pass
 
 
