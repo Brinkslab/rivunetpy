@@ -9,6 +9,7 @@ from SimpleITK.SimpleITK import Image
 
 from rivuletpy.utils.filtering import apply_threshold
 from rivuletpy.utils.plottools import flatten
+from rivuletpy.utils.metrics import euclidean_distance
 
 
 def get_intensity(img):
@@ -16,10 +17,6 @@ def get_intensity(img):
         img = sitk.GetArrayFromImage(img)
 
     return np.sum(img)
-
-
-def distance(point1, point2):
-    return np.sqrt(np.sum(np.square(np.sum(np.array([np.array(point1), -np.array(point2)]), axis=0))))
 
 
 class NeuronSegmentor:
@@ -245,7 +242,7 @@ class NeuronSegmentor:
                     if ii == jj:
                         pass
                     else:
-                        delta = distance(seed, compared_seed)
+                        delta = euclidean_distance(seed, compared_seed)
                         if delta < radius * 2:  # Scale is a radius
                             kill_indices.append(jj)
                 valid_seeds = np.delete(valid_seeds, kill_indices, axis=0)

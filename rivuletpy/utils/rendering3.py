@@ -14,6 +14,7 @@ black = (0, 0, 0, 1)
 gray = (0.5, 0.5, 0.5)
 red = (1, 0, 0)
 
+
 def _add_attrs(geom, attrs):
     if "color" in attrs:
         geom.set_color(*attrs["color"])
@@ -191,3 +192,4 @@ class Viewer3(Viewer):
         self.onetime_geoms = []
         return arr
         # super(Viewer3, self).render(return_rgb_array)
+

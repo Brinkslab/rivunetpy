@@ -2,26 +2,59 @@ import math
 import numpy as np
 import time
 
-from .utils.io import saveswc
+
 from collections import Counter
 from random import gauss
-from random import random
-from random import randrange
+from random import random, randrange
+
+from itertools import cycle
+
+import numpy as np
 from scipy.spatial.distance import cdist
+from PIL import Image
+from matplotlib.axes import Axes
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+import vtk
+from vtkmodules.vtkCommonColor import vtkNamedColors
+from vtkmodules.vtkCommonCore import vtkPoints
+from vtkmodules.vtkCommonDataModel import (
+    vtkCellArray,
+    vtkLine,
+    vtkPolyData
+)
+# noinspection PyUnresolvedReferences
+import vtkmodules.vtkInteractionStyle
+# noinspection PyUnresolvedReferences
+import vtkmodules.vtkRenderingOpenGL2
+from vtkmodules.vtkFiltersCore import vtkTubeFilter
+from vtkmodules.vtkFiltersSources import vtkLineSource
+from vtkmodules.vtkRenderingCore import (
+    vtkActor,
+    vtkPolyDataMapper,
+)
 
-
+from rivuletpy.utils.io import saveswc
+from rivuletpy.utils.metrics import euclidean_distance
+from rivuletpy.utils.color import RGB_from_hex
 
 
 class SWC(object):
 
     def __init__(self, soma=None):
         self._data = np.zeros((1, 8))
+        self.swc_density = 90
         if soma:
             self._data[0, :] = np.asarray([0, 1, soma.centroid[0], soma.centroid[
-                                          1], soma.centroid[2], soma.radius, -1, 1])
+                1], soma.centroid[2], soma.radius, -1, 1])
 
     def add(self, swc_nodes):
         np.vstack((self._data, swc_nodes))
+
+    def set_view_density(self, perc):
+        assert 1 <= perc <= 100, 'Quantile of segments (in %) to plot should be between 1 and 100'
+        self.swc_density = perc
 
     def add_branch(self, branch, pidx=None, random_color=True):
         '''
@@ -33,7 +66,7 @@ class SWC(object):
 
         new_branch = np.zeros((len(branch.pts), 8))
         id_start = 1 if self._data.shape[
-            0] == 1 else self._data[:, 0].max() + 1
+                            0] == 1 else self._data[:, 0].max() + 1
 
         for i in range(len(branch.pts)):
             p, r, c = branch.pts[i], branch.radius[i], branch.conf[i]
@@ -52,7 +85,7 @@ class SWC(object):
                 if i == 0:
                     nodetype = 6  # Endpoint
 
-            assert(pid != id)
+            assert (pid != id)
             new_branch[i] = np.asarray([
                 id, rand_node_type
                 if random_color else nodetype, p[0], p[1], p[2], r, pid, c])
@@ -135,7 +168,7 @@ class SWC(object):
         set2keep = groups[maxidx]
         id2keep = [n.id for n in set2keep]
         self._data = self._data[
-            np.in1d(self._data[:, 0], np.asarray(id2keep)), :]
+                     np.in1d(self._data[:, 0], np.asarray(id2keep)), :]
 
     def prune(self):
         self._prune_unreached()
@@ -191,7 +224,7 @@ class SWC(object):
         # Compute the center of mass
         center = self._data[:, 2:5].mean(axis=0)
         translated = self._data[:, 2:5] - \
-            np.tile(center, (self._data.shape[0], 1))
+                     np.tile(center, (self._data.shape[0], 1))
 
         # Init viewer
         viewer = Viewer3(800, 800, 800)
@@ -219,12 +252,11 @@ class SWC(object):
                     l.set_color(*line_color)
                     viewer.add_geom(l)
 
-        while(True):
+        while (True):
             try:
                 viewer.render(return_rgb_array=False)
             except KeyboardInterrupt:
                 break
-
 
     def swc_to_dicts(self):
         # Create connectivity dictionary
@@ -263,83 +295,164 @@ class SWC(object):
             while (SampleID != ParentID) and (ParentID in swc_dict):
                 SampleID = swc_dict.pop(SampleID)
                 ParentID = swc_dict[SampleID]
-                segment.append(swc_indices[SampleID]) # Segments consist of INDICES in original SWC
+                segment.append(swc_indices[SampleID])  # Segments consist of INDICES in original SWC
 
             segment.append(swc_indices[ParentID])
             segment_maps.append(segment)
 
         return segment_maps
 
-    def swc_to_actors(self, thickness=1.0, offset=None):
-        from vtkmodules.vtkCommonColor import vtkNamedColors
-        from vtkmodules.vtkCommonCore import vtkPoints
-        from vtkmodules.vtkCommonDataModel import (
-            vtkCellArray,
-            vtkLine,
-            vtkPolyData
-        )
-        from vtkmodules.vtkRenderingCore import (
-            vtkActor,
-            vtkPolyDataMapper
-        )
-
+    def as_actor(self, color=None, fancy=True):
         # Create the polydata where we will store all the geometric data
         # https://stackoverflow.com/questions/17547851/create-vtkpolydata-object-from-list-with-tuples-in-python
-        # https://kitware.github.io/vtk-examples/site/Python/GeometricObjects/LongLine/
+        # https://kitware.github.io/vtk-examples/site/Python/GeometricObjects/LongLine
+
+        if color is None:
+            prop_cycle = plt.rcParams['axes.prop_cycle']
+            colors = cycle(prop_cycle.by_key()['color'])
+            color = next(colors)
 
         # Compute the center of mass
         center = self._data[:, 2:5].mean(axis=0)
-        translated = self._data[:, 2:5] - \
-                     np.tile(center, (self._data.shape[0], 1))
 
-        # Get the dictionaries outlining the connectivities. From these, compute the indecies that map to segments
-        start = time.time()
-        segment_maps = self.get_all_segments()
-        segment_points = []
-        for map in segment_maps:
-            segment_points.append(self._data[map, 2:5])
-        print(f'Segmenting SWC into {len(segment_maps)} branches took: {(time.time() - start)*1E3} ms')
+        # Compute relative coordinates
+        coords = self._data[:, 2:5] - \
+                 np.tile(center, (self._data.shape[0], 1))
 
-        # Using the index map, plot each branch:
+        # Get radii
+        radii = self._data[:, 5]
 
+        # Get Sample IDs
+        sample_ids = self._data[:, 0]
+
+        # Empty array of actors to be filled and converted into an assembly later
         actors = []
-        for point_set in segment_points:
-            points = vtkPoints()
+        assembly = vtk.vtkAssembly()
 
-            for point in point_set:
-                if offset is not None:
-                    point = (point[0], point[1], point[2]+offset)
-                points.InsertNextPoint(point)
+        if not fancy:
+            # Get the dictionaries outlining the connectivities. From these, compute the indecies that map to segments
+            segment_maps = self.get_all_segments()
+            segment_points = []
+            for map in segment_maps:
+                segment_points.append(self._data[map, 2:5])
 
-            lines = vtkCellArray()
-            for ii in range(len(point_set)-1):
-                line = vtkLine()
-                line.GetPointIds().SetId(0, ii)
-                line.GetPointIds().SetId(1, ii+1)
-                lines.InsertNextCell(line)
+            # Using the index map, plot each branch:
+            for point_set in segment_points:
+                points = vtkPoints()
 
-            # Create a polydata to store everything in
-            linesPolyData = vtkPolyData()
+                for point in point_set:
+                    point = (point[0], point[1], point[2])
+                    points.InsertNextPoint(point)
 
-            # Add the points to the dataset
-            linesPolyData.SetPoints(points)
+                lines = vtkCellArray()
+                for ii in range(len(point_set) - 1):
+                    line = vtkLine()
+                    line.GetPointIds().SetId(0, ii)
+                    line.GetPointIds().SetId(1, ii + 1)
+                    lines.InsertNextCell(line)
 
-            # Add the lines to the dataset
-            linesPolyData.SetLines(lines)
+                # Create a polydata to store everything in
+                linesPolyData = vtkPolyData()
 
-            # Setup color, actor and mapper
-            colors = vtkNamedColors()
-            mapper = vtkPolyDataMapper()
-            mapper.SetInputData(linesPolyData)
+                # Add the points to the dataset
+                linesPolyData.SetPoints(points)
 
-            actor = vtkActor()
-            actor.SetMapper(mapper)
-            actor.GetProperty().SetLineWidth(4*thickness)
-            actor.GetProperty().SetColor(colors.GetColor3d('Peacock'))
+                # Add the lines to the dataset
+                linesPolyData.SetLines(lines)
 
-            actors.append(actor)
-        return actors
+                # Setup color, actor and mapper
+                colors = vtkNamedColors()
+                mapper = vtkPolyDataMapper()
+                mapper.SetInputData(linesPolyData)
 
+                actor = vtkActor()
+                actor.SetMapper(mapper)
+                actor.GetProperty().SetLineWidth(4)
+                actor.GetProperty().SetColor(colors.GetColor3d(RGB_from_hex(color)))
+
+                actors.append(actor)
+
+            for actor in actors:
+                assembly.AddPart(actor)
+
+        else:  # Fancy render
+            # https://kitware.github.io/vtk-examples/site/Python/PolyData/TubeFilter/
+
+
+            line_lengths = []
+
+            for ii in range(self._data.shape[0]):
+
+                # Change color if its a bifurcation
+                if (self._data[ii, 0] == self._data[:, -1]).sum() > 1:
+                    pass
+
+                lineSource = vtkLineSource()
+
+                # Draw a line between this node and its parent
+                if ii < self._data.shape[0] - 1 and self._data[ii, 0] == self._data[ii + 1, -1]:
+                    pp1 = coords[ii, :]
+                    pp2 = coords[ii + 1, :]
+                    lineSource.SetPoint1(*pp1)
+                    lineSource.SetPoint2(*pp2)
+                else:
+                    parent_id = self._data[ii, -1]
+                    pidx = np.argwhere(parent_id == sample_ids).flatten()
+                    if len(pidx) == 1:
+                        pp1 = coords[ii, :]
+                        pp2 = coords[pidx, :].flatten()
+                        lineSource.SetPoint1(*pp1)
+                        lineSource.SetPoint2(*pp2)
+                    else:
+                        pp1 = None
+                        pp2 = None
+
+                if pp1 is None: # If a line should not be drawn, contunue
+                    continue
+
+                line_lengths.append(euclidean_distance(pp1, pp2))
+
+                # Setup actor and mapper
+                lineMapper = vtkPolyDataMapper()
+                lineMapper.SetInputConnection(lineSource.GetOutputPort())
+
+                lineActor = vtkActor()
+                lineActor.SetMapper(lineMapper)
+
+                # Create tube filter
+                tubeFilter = vtkTubeFilter()
+                tubeFilter.SetInputConnection(lineSource.GetOutputPort())
+                tubeFilter.SetRadius(radii[ii])
+                tubeFilter.SetNumberOfSides(12)
+                tubeFilter.CappingOn()
+                tubeFilter.Update()
+
+                # Setup actor and mapper
+                tubeMapper = vtkPolyDataMapper()
+                tubeMapper.SetInputConnection(tubeFilter.GetOutputPort())
+
+                tubeActor = vtkActor()
+                tubeActor.SetMapper(tubeMapper)
+
+                # Set transparency.
+                tubeActor.GetProperty().SetOpacity(1)
+
+                # Set color
+                tubeActor.GetProperty().SetColor(RGB_from_hex(color))
+
+                # Cap end points
+                tubeActor
+
+                actors.append(tubeActor)
+
+            quant = np.quantile(line_lengths, (100 - self.swc_density) / 100)
+
+            for line_length, actor in zip(line_lengths, actors):
+                if line_length > quant:
+                    assembly.AddPart(actor)
+
+        assembly.SetOrigin(center)
+        return assembly
 
     def as_image(self, **kwargs):
         """Exports SWC data as 2D image.
@@ -373,30 +486,22 @@ class SWC(object):
 
         """
 
-        from itertools import cycle
-
-        import numpy as np
-        from PIL import Image
-        from matplotlib.axes import Axes
-        import matplotlib.pyplot as plt
-        from matplotlib.figure import Figure
-        from matplotlib.backends.backend_agg import FigureCanvasAgg
 
         MAX_SEGMENTS = 2_500
 
         # Compute the center of mass
         center = self._data[:, 2:5].mean(axis=0)
         translated = self._data[:, 2:5] - \
-            np.tile(center, (self._data.shape[0], 1))
+                     np.tile(center, (self._data.shape[0], 1))
 
         lid = self._data[:, 0]
 
         # Plot square by default, always turn off frame
         if kwargs == {}:
-            kwargs = {'figsize' : [6.4, 6.4]}
+            kwargs = {'figsize': [6.4, 6.4]}
         kwargs['frameon'] = False
 
-        if 'ax' in kwargs: # Plotting directly to axes
+        if 'ax' in kwargs:  # Plotting directly to axes
             AX_SET = True
             ax = kwargs['ax']
             ax.set_aspect('equal', adjustable='box')
@@ -425,12 +530,12 @@ class SWC(object):
             # Draw a line between this node and its parent
             if ii < self._data.shape[0] - 1 and self._data[ii, 0] == self._data[ii + 1, -1]:
                 # print(f'Plot\t{translated[ii, :]}\t{translated[ii + 1, :]}')
-                ax.plot(translated[ii:ii+2, 0], translated[ii:ii+2, 1], color=line_color)
+                ax.plot(translated[ii:ii + 2, 0], translated[ii:ii + 2, 1], color=line_color)
 
             else:
                 pid = self._data[ii, -1]
                 pidx = np.argwhere(pid == lid)
-                pidx = np.squeeze(pidx, axis=1) # Remove unnecessary dimension
+                pidx = np.squeeze(pidx, axis=1)  # Remove unnecessary dimension
                 if len(pidx) == 1:
                     # print(f'Plot\t{translated[ii, :]}\t{translated[pidx, :].flatten()}')
                     x_indices = np.concatenate([[ii], pidx])
@@ -444,7 +549,6 @@ class SWC(object):
             im = Image.fromarray(rgba)
 
             return im
-
 
     def push_nodes_with_binary(self, b, step_ratio=0.1, niter=0):
         '''
@@ -469,7 +573,7 @@ class SWC(object):
                     if len(cidx) == 1:
                         cx, cy, cz = t_data[cidx[0], 2:5]
                         vnorm = (
-                            vnorm + norm_vec(np.asarray([cx - x, cy - y, cz - z]))) / 2
+                                        vnorm + norm_vec(np.asarray([cx - x, cy - y, cz - z]))) / 2
                     if all([v == 0 for v in vnorm]):
                         continue
 
@@ -499,7 +603,7 @@ class SWC(object):
 
 def get_distance_to_boundary(pt, vec, b):
     temp_pt = pt.copy()
-    while(True):
+    while (True):
         next_pt = temp_pt + vec
         if b[math.floor(next_pt[0]),
              math.floor(next_pt[1]),
@@ -525,7 +629,7 @@ def get_perpendicular_vectors(pt, vec):
 
 def make_rand_vector3d():
     vec = [gauss(0, 1) for i in range(3)]
-    mag = sum(x**2 for x in vec) ** .5
+    mag = sum(x ** 2 for x in vec) ** .5
     return [x / mag for x in vec]
 
 
@@ -599,7 +703,6 @@ def connected_components(nodes):
         # Iterate the queue.
         # When it's empty, we finished visiting a group of connected nodes.
         while queue:
-
             # Consume the next item from the queue.
             n = queue.pop(0)
 

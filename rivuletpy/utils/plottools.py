@@ -1,10 +1,11 @@
 import numpy as np
 import SimpleITK as sitk
+import matplotlib as plt
+from itertools import cycle
 
 from rivuletpy.swc import SWC
 from rivuletpy.utils.volume_rendering_vtk import (volumeRender, vtk_create_renderer, set_camera,
                                                   vtk_show, vtk_basic, get_tf)
-
 
 def flatten(image, whitebackground=False):
 
@@ -35,6 +36,11 @@ def get_actors_from_args(args, labeled):
         raise ValueError('Expected labeled keyword argument to contain an equal amount '
                         'True/Falses as there are input images.')
 
+    # Colors for coloring SWCs
+    prop_cycle = plt.rcParams['axes.prop_cycle']
+    colors = cycle(prop_cycle.by_key()['color'])
+    color = next(colors)
+
     for arg in args:
         if type(arg) is sitk.Image:
             img = arg
@@ -44,12 +50,14 @@ def get_actors_from_args(args, labeled):
             tf = get_tf(data)
 
             actor = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
-            actor_list = actor_list + actor
+
 
         if type(arg) is SWC:
             swc = arg
-            actors = swc.swc_to_actors(offset=swc_Z_offset)
-            actor_list = actor_list + actors
+            actor = swc.as_actor(color=color)
+            color = next(colors)
+
+        actor_list.append(actor)
 
     return actor_list
 

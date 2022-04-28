@@ -10,8 +10,9 @@ import SimpleITK as sitk
 import vtk
 import numpy as np
 import matplotlib.pyplot as plt
-
 from vtk.util.vtkConstants import VTK_UNSIGNED_CHAR
+
+from rivuletpy.utils.color import RGB_from_hex
 
 def get_tf(data): # Get transfer functions
     q = mquantiles(data.flatten(), [0.7, 0.98])
@@ -97,11 +98,6 @@ def set_camera(ren, volume=None, pos=None, az=None, el=None, up=None, foc=None):
     # camera.ResetCameraClippingRange()
 
 
-def RGB_from_hex(hex: str, norm=False):
-    rgb = tuple(int(hex.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
-    if norm:
-        rgb = np.array(rgb)/255
-    return rgb
 
 def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False):
     importer = numpy2VTK(img, spacing)

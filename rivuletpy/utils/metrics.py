@@ -291,3 +291,6 @@ def track_path_nodes_dijstra(g, target, source):
         nodes_on_path.add(n)
 
     return nodes_on_path
+
+def euclidean_distance(point1, point2):
+    return np.sqrt(np.sum(np.square(np.sum(np.array([np.array(point1), -np.array(point2)]), axis=0))))
