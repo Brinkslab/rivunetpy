@@ -45,6 +45,7 @@ class SWC(object):
     def __init__(self, soma=None):
         self._data = np.zeros((1, 8))
         self.swc_density = 90
+        self.swc_fancy = False
         if soma:
             self._data[0, :] = np.asarray([0, 1, soma.centroid[0], soma.centroid[
                 1], soma.centroid[2], soma.radius, -1, 1])
@@ -55,6 +56,9 @@ class SWC(object):
     def set_view_density(self, perc):
         assert 1 <= perc <= 100, 'Quantile of segments (in %) to plot should be between 1 and 100'
         self.swc_density = perc
+
+    def set_fanciness(self, fancy):
+        self.swc_fancy = fancy
 
     def add_branch(self, branch, pidx=None, random_color=True):
         '''
@@ -302,7 +306,7 @@ class SWC(object):
 
         return segment_maps
 
-    def as_actor(self, color=None, fancy=True):
+    def as_actor(self, color=None, centered=False):
         # Create the polydata where we will store all the geometric data
         # https://stackoverflow.com/questions/17547851/create-vtkpolydata-object-from-list-with-tuples-in-python
         # https://kitware.github.io/vtk-examples/site/Python/GeometricObjects/LongLine
@@ -316,8 +320,11 @@ class SWC(object):
         center = self._data[:, 2:5].mean(axis=0)
 
         # Compute relative coordinates
-        coords = self._data[:, 2:5] - \
+        if centered:
+            coords = self._data[:, 2:5] - \
                  np.tile(center, (self._data.shape[0], 1))
+        else:
+            coords = self._data[:, 2:5]
 
         # Get radii
         radii = self._data[:, 5]
@@ -329,7 +336,7 @@ class SWC(object):
         actors = []
         assembly = vtk.vtkAssembly()
 
-        if not fancy:
+        if not self.swc_fancy:
             # Get the dictionaries outlining the connectivities. From these, compute the indecies that map to segments
             segment_maps = self.get_all_segments()
             segment_points = []
@@ -368,7 +375,7 @@ class SWC(object):
                 actor = vtkActor()
                 actor.SetMapper(mapper)
                 actor.GetProperty().SetLineWidth(4)
-                actor.GetProperty().SetColor(colors.GetColor3d(RGB_from_hex(color)))
+                actor.GetProperty().SetColor(RGB_from_hex(color))
 
                 actors.append(actor)
 

@@ -13,6 +13,7 @@ filtering/morphology.py
 filtering/riveal.py
 filtering/thresholding.py
 rivuletpy/__init__.py
+rivuletpy/rtrace.py
 rivuletpy/soma.py
 rivuletpy/swc.py
 rivuletpy/trace.py
@@ -26,7 +27,12 @@ rivuletpy/msfm/_msfm.h
 rivuletpy/msfm/common.c
 rivuletpy/msfm/msfmmodule.c
 rivuletpy/utils/__init__.py
+rivuletpy/utils/color.py
+rivuletpy/utils/filtering.py
 rivuletpy/utils/io.py
 rivuletpy/utils/metrics.py
+rivuletpy/utils/plottools.py
 rivuletpy/utils/rendering.py
 rivuletpy/utils/rendering3.py
+rivuletpy/utils/segmentation.py
+rivuletpy/utils/volume_rendering_vtk.py

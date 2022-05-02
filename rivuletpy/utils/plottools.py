@@ -25,14 +25,15 @@ def flatten(image, whitebackground=False):
                         f'but got an image of {image.ndim} dimensions of shape {image.shape}')
     return flat_image
 
-def get_actors_from_args(args, labeled):
+def get_actors_from_args(args, labeled=False):
     actor_list = []
 
     num_images = 0
     for arg in args:
         if type(arg) is sitk.Image:
             num_images += 1
-    if not len(labeled) == num_images:
+
+    if labeled and not len(labeled) == num_images:
         raise ValueError('Expected labeled keyword argument to contain an equal amount '
                         'True/Falses as there are input images.')
 
@@ -46,24 +47,24 @@ def get_actors_from_args(args, labeled):
             img = arg
             data = sitk.GetArrayFromImage(img)
             # TODO: Need to flip either image or SWC. SWC is probably the wisest here.
-            data = np.flip(data, axis=1)
+            #data = np.flip(data, axis=1)
+            data = np.transpose(data, axes=[2, 1, 0])
             tf = get_tf(data)
 
             actor = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
 
-
         if type(arg) is SWC:
             swc = arg
-            actor = swc.as_actor(color=color)
+            actor = swc.as_actor(color=color, centered=False)
             color = next(colors)
 
         actor_list.append(actor)
 
     return actor_list
 
-def volume_view(*args, labeled=[]):
+def volume_view(*args, labeled=False):
 
-    actor_list = get_actors_from_args(args, labeled)
+    actor_list = get_actors_from_args(args, labeled=labeled)
 
     vtk_basic(actor_list)
 

@@ -15,7 +15,7 @@ FORCE = False  # Force recalculation of SWC
 
 if __name__ == '__main__':
 
-    out_name = FILENAME.replace('.tif', '.r2.swc')
+    out_name = FILENAME.replace('.tif', '.swc')
     image = ReadImage(FILENAME, imageIO='TIFFImageIO')
 
     fig, ax = plt.subplots(1, 3)

@@ -68,7 +68,7 @@ class NeuronSegmentor:
 
         print('(G)\t Getting neurons')
         self.get_neurons()
-        self.get_neuron_images()
+        self.make_neuron_images()
 
     def get_soma_scale(self):
         self.soma_scale = self.get_max_scale(self.binary)
@@ -459,14 +459,12 @@ class NeuronSegmentor:
 
         self.neurons = components
 
-    def get_neuron_images(self):
+    def make_neuron_images(self):
         self.neuron_images = []
         for label in tqdm(self.neuron_labels):
             region = self.neurons == label
             image = self.img * sitk.Cast(region, self.PixelID)
             self.neuron_images.append(image)
-
-
 
     def __str__(self):
         return (f'Neuron(s) with \n\tSoma Scale = {self.soma_scale}\n'

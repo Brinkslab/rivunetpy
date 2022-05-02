@@ -1,7 +1,6 @@
 import os
 
 import time
-import numpy as np
 from scipy.ndimage.interpolation import zoom
 import SimpleITK as sitk
 
@@ -9,8 +8,6 @@ from rivuletpy.trace import R2Tracer
 from rivuletpy.utils.io import loadimg, crop, swc2world, swc2vtk
 from rivuletpy.utils.filtering import apply_threshold
 from rivuletpy.trace import estimate_radius
-import matplotlib.pyplot as plt
-from rivuletpy.utils.plottools import imshow_flatten
 
 
 def show_logo():
@@ -24,7 +21,6 @@ def show_logo():
 888  T88b  888  Y8bd8P  Y88b 888 888 Y8b.     Y88b.        888\"       
 888   T88b 888   Y88P    \"Y88888 888  \"Y8888   \"Y888       888888888\n"""
     print(s)
-
 
 def main(file=None, out=None, threshold=0, zoom_factor=1, save_soma=False,
          speed=False, quality=False, clean=True, non_stop=False, npush=0,

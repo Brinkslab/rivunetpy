@@ -99,7 +99,7 @@ def set_camera(ren, volume=None, pos=None, az=None, el=None, up=None, foc=None):
 
 
 
-def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False):
+def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False,opacity=0.10):
     importer = numpy2VTK(img, spacing)
 
     # Transfer Functions
@@ -130,7 +130,7 @@ def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False):
             color_tf.AddRGBPoint(p[0], p[1], p[2], p[3])
 
     for p in tf:
-        opacity_tf.AddPoint(p[0], p[4])
+        opacity_tf.AddPoint(p[0], p[4]*opacity)
 
     # working on the GPU
     volMapper = vtk.vtkGPUVolumeRayCastMapper()
@@ -166,7 +166,7 @@ def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False):
     vol.SetMapper(volMapper)
     vol.SetProperty(volProperty)
 
-    return [vol]
+    return vol
 
 
 def vtk_create_renderer(actors, light_follows=True):
