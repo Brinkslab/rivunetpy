@@ -43,32 +43,45 @@ class NeuronSegmentor:
         self.neuron_labels = None
         self.neuron_images = None
 
+        with tqdm(total=9) as pbar:
+            # print('(Seg-1)\t Getting soma scale...', end='')
+            self.get_soma_scale()
+            # print(f'scale = {self.soma_scale} px')
+            pbar.update(1)
 
-        print('(A)\t Getting soma scale...', end='')
-        self.get_soma_scale()
-        print(f'scale = {self.soma_scale} px')
+            # print('(Seg-2)\t Getting soma seeds...', end='')
+            self.get_soma_seeds()
+            # print(f'{len(self.soma_seeds)} seeds found')
+            pbar.update(1)
 
-        print('(B)\t Getting soma seeds...', end='')
-        self.get_soma_seeds()
-        print(f'{len(self.soma_seeds)} seeds found')
+            # print('(Seg-3)\t Creating soma mask')
+            self.get_soma_mask()
+            pbar.update(1)
 
-        print('(C)\t Creating soma mask')
-        self.get_soma_mask()
+            # print('(Seg-4)\t Creating neurite image')
+            self.get_neurite_img()
+            pbar.update(1)
 
-        print('(D)\t Creating neurite image')
-        self.get_neurite_img()
+            # print('(Seg-5)\t Getting neurite scale...', end='')
+            self.get_neurite_scale()
+            # print(f'scale = {self.neurite_scale} px')
+            pbar.update(1)
 
-        print('(E)\t Getting neurite scale...', end='')
-        self.get_neurite_scale()
-        print(f'scale = {self.neurite_scale} px')
+            # print('(Seg-6)\t Applying frangi filter')
+            self.frangi_filter()
+            pbar.update(1)
 
-        print('(F)\t Getting filtered neurite image')
-        self.frangi_filter()
-        self.make_composite_image()
+            # print('(Seg-7)\t Covering soma of filtered image for tracing')
+            self.make_composite_image()
+            pbar.update(1)
 
-        print('(G)\t Getting neurons')
-        self.get_neurons()
-        self.make_neuron_images()
+            # print('(Seg-8)\t Getting neurons regions')
+            self.get_neurons()
+            pbar.update(1)
+
+            # print('(Seg-9)\t Creating individual neuron images')
+            self.make_neuron_images()
+            pbar.update(10)
 
     def get_soma_scale(self):
         self.soma_scale = self.get_max_scale(self.binary)
@@ -230,27 +243,24 @@ class NeuronSegmentor:
         valid_seeds = copy.copy(seeds)
         init_seeds = len(valid_seeds)  # Initial number of seeds
 
-        with tqdm(total=init_seeds) as pbar:
-            ii = 0
-            while True:
-                if ii == len(valid_seeds):
-                    break
 
-                seed = valid_seeds[ii]
-                kill_indices = []
-                for jj, compared_seed in enumerate(valid_seeds):
-                    if ii == jj:
-                        pass
-                    else:
-                        delta = euclidean_distance(seed, compared_seed)
-                        if delta < radius * 2:  # Scale is a radius
-                            kill_indices.append(jj)
-                valid_seeds = np.delete(valid_seeds, kill_indices, axis=0)
+        ii = 0
+        while True:
+            if ii == len(valid_seeds):
+                break
 
-                ii += 1
-                pbar.update(1)
+            seed = valid_seeds[ii]
+            kill_indices = []
+            for jj, compared_seed in enumerate(valid_seeds):
+                if ii == jj:
+                    pass
+                else:
+                    delta = euclidean_distance(seed, compared_seed)
+                    if delta < radius * 2:  # Scale is a radius
+                        kill_indices.append(jj)
+            valid_seeds = np.delete(valid_seeds, kill_indices, axis=0)
 
-            pbar.update(init_seeds - ii)  # Finish up loading bar
+            ii += 1
 
         return valid_seeds
 
@@ -332,7 +342,7 @@ class NeuronSegmentor:
 
         images = []
 
-        for ii, scale in tqdm(enumerate(scales)):
+        for ii, scale in enumerate(scales):
             gaussian_filter.SetVariance(int(scale ** 2))  # Sigma = Var^2
             img_blurred = gaussian_filter.Execute(img)
             img_blurred = sitk.Cast(img_blurred, sitk.sitkFloat32)
@@ -402,38 +412,31 @@ class NeuronSegmentor:
 
             soma_sticker += sitk.Cast(region, sitk.sitkUInt16) * mean_I
 
-        comp = soma_sticker + self.neurite_frangi * sitk.Cast(mask == 0, sitk.sitkUInt16)
-        # img_rescaled = sitk.RescaleIntensity(self.img)
 
+        inverted_mask = sitk.Cast(mask == 0, sitk.sitkUInt16)
+        # comp = self.max_between_stacks(soma_sticker, self.neurite_frangi * sitk.Cast(mask == 0, sitk.sitkUInt16))
+        comp = self.neurite_frangi * inverted_mask + soma_sticker
+        # img_rescaled = sitk.RescaleIntensity(self.img)
         self.composite_image = comp
 
-    def get_neurons(self, confidence=False):
-        if confidence:
-            mask = sitk.ConfidenceConnected(self.composite_image, seedList=self.soma_seeds.tolist(),
-                                            numberOfIterations=5,
-                                            multiplier=2,
-                                            initialNeighborhoodRadius=1,
-                                            replaceValue=1)
-        else:
-            threshold_filter = sitk.IsoDataThresholdImageFilter()
-            threshold_filter.SetInsideValue(1)
-            threshold_filter.SetOutsideValue(0)
-            threshold_filter.Execute(self.composite_image)
+    def get_neurons(self):
 
-            threshold = threshold_filter.GetThreshold()
-            # print(threshold)
-            # plt.imshow(flatten(self.composite_image > threshold))
-            # plt.show()
+        threshold_filter = sitk.TriangleThresholdImageFilter()
+        threshold_filter.SetInsideValue(1)
+        threshold_filter.SetOutsideValue(0)
+        threshold_filter.Execute(self.composite_image)
 
-            mask = sitk.ConnectedThreshold(self.composite_image,
-                                           seedList=self.soma_seeds.tolist(),
-                                           lower=threshold,
-                                           upper=65535)
+        threshold = threshold_filter.GetThreshold()
+        # print(threshold)
+        # plt.imshow(flatten(self.composite_image > threshold))
+        # plt.show()
 
-        print('\tFinished getting mask')
+        mask = sitk.ConnectedThreshold(self.composite_image,
+                                       seedList=self.soma_seeds.tolist(),
+                                       lower=threshold,
+                                       upper=65535)
 
         # global_mask = self.max_between_stacks(mask, self.soma_mask)
-
 
         if self.save:
             self.orig_mask = mask
@@ -444,24 +447,27 @@ class NeuronSegmentor:
 
         mask = dilate_filter.Execute(mask)
 
-        print('\tFinished dilation')
-
         if self.save:
             self.dil_mask = mask
 
         components = sitk.ConnectedComponent(mask)
+
+        dist_filter = sitk.SignedDanielssonDistanceMapImageFilter()
+        dist_filter.Execute(components)
+        voronoi = dist_filter.GetVoronoiMap()
+
+
+
         stats = sitk.LabelIntensityStatisticsImageFilter()
-        stats.Execute(components, self.composite_image)
+        stats.Execute(voronoi, self.img)
 
         self.neuron_labels = stats.GetLabels()
 
-        print('\tFinished getting components')
-
-        self.neurons = components
+        self.neurons = voronoi
 
     def make_neuron_images(self):
         self.neuron_images = []
-        for label in tqdm(self.neuron_labels):
+        for label in self.neuron_labels:
             region = self.neurons == label
             image = self.img * sitk.Cast(region, self.PixelID)
             self.neuron_images.append(image)
