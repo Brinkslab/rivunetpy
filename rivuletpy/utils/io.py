@@ -3,32 +3,6 @@ import numpy as np
 from scipy import io as sio
 import SimpleITK as sitk
 
-
-def reduce_to_8_bit(img, strict=True, report=False):
-    assert type(img) is np.ndarray, f'Expected image to be of type np.ndarray, instead got: {type(img)}'
-
-    pass
-
-    if img.dtype in (np.dtype(np.uint8), np.dtype('uint8')):
-        pass
-    elif img.dtype in (np.dtype(np.uint16), np.dtype('uint16')):
-        if img.max() <= 4095:  # 12-bit
-            orig_depth = 12
-            img = img / 16
-        else:
-            orig_depth = 16
-            img = img / 256
-
-        img = img.astype(np.uint8)
-        print(f'Converted a {orig_depth}-bit image to 8-bit.')
-    else:
-        if strict:
-            raise TypeError('Expected an image with type np.uint8 or np.uint16 (8/12/16-bit depth), '
-                            f'instead got image of type: {img.dtype}')
-
-    return img
-
-
 def loadimg(file, target_resolution, ):
     if file.endswith('.mat'):
         filecont = sio.loadmat(file)
@@ -67,7 +41,8 @@ def loadimg(file, target_resolution, ):
 
 def loadtiff3d(filepath, out='Numpy'):
     """Load a tiff file into 3D numpy array"""
-    im = sitk.ReadImage(filepath, sitk.sitkUInt16, imageIO='TIFFImageIO')
+    # im = sitk.ReadImage(filepath, sitk.sitkUInt16, imageIO='TIFFImageIO')
+    im = sitk.ReadImage(filepath, imageIO='TIFFImageIO')
     if out == 'Numpy':
         im = sitk.GetArrayFromImage(im)
     elif out == 'SITK':
