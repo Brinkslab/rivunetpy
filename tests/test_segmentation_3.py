@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     plt.style.use('dark_background')
 
-    filename = 'data/Image4.v3dpbd.tif'
+    filename = 'data/Synthetic-no-bg.tif'
 
     img = loadtiff3d(filename, out='SITK') # Original Image
 
