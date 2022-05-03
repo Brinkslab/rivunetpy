@@ -16,22 +16,14 @@ FORCE = True
 
 if __name__ == '__main__':
 
-    plt.style.use('dark_background')
-
-    filename = 'data/Synthetic-no-bg.tif'
+    filename = 'data/Synthetic-no-bg-double-size.tif'
 
     img = loadtiff3d(filename, out='SITK') # Original Image
 
-    neurons = NeuronSegmentor(img, save=True)
+    neurons = NeuronSegmentor(img)
     neurons.plot_full_segmentation()
 
     neuron_images = neurons.neuron_images
-
-    for image in neuron_images:
-        plt.imshow(flatten(image), cmap='gray')
-        plt.title(img.GetPixelID())
-        plt.colorbar()
-        plt.show()
 
     pass
 
