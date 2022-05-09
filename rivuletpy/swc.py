@@ -1,12 +1,9 @@
 import math
 import numpy as np
 import time
-
-
 from collections import Counter
 from random import gauss
 from random import random, randrange
-
 from itertools import cycle
 
 import numpy as np
@@ -44,8 +41,12 @@ class SWC(object):
 
     def __init__(self, soma=None):
         self._data = np.zeros((1, 8))
+
+        ########## PLOTTING PARAMETERS ##########
         self.swc_density = 90
         self.swc_fancy = False
+        #########################################
+
         if soma:
             self._data[0, :] = np.asarray([0, 1, soma.centroid[0], soma.centroid[
                 1], soma.centroid[2], soma.radius, -1, 1])
@@ -60,7 +61,7 @@ class SWC(object):
     def set_fanciness(self, fancy):
         self.swc_fancy = fancy
 
-    def add_branch(self, branch, pidx=None, random_color=True):
+    def add_branch(self, branch, pidx=None, random_color=False):
         '''
         Add a branch to swc.
         Note: This swc is special with N X 8 shape. The 8-th column is the online confidence
@@ -322,7 +323,7 @@ class SWC(object):
         # Compute relative coordinates
         if centered:
             coords = self._data[:, 2:5] - \
-                 np.tile(center, (self._data.shape[0], 1))
+                     np.tile(center, (self._data.shape[0], 1))
         else:
             coords = self._data[:, 2:5]
 
@@ -385,7 +386,6 @@ class SWC(object):
         else:  # Fancy render
             # https://kitware.github.io/vtk-examples/site/Python/PolyData/TubeFilter/
 
-
             line_lengths = []
 
             for ii in range(self._data.shape[0]):
@@ -414,7 +414,7 @@ class SWC(object):
                         pp1 = None
                         pp2 = None
 
-                if pp1 is None: # If a line should not be drawn, contunue
+                if pp1 is None:  # If a line should not be drawn, contunue
                     continue
 
                 line_lengths.append(euclidean_distance(pp1, pp2))
@@ -492,7 +492,6 @@ class SWC(object):
             >>> s.as_image(ax=ax)
 
         """
-
 
         MAX_SEGMENTS = 2_500
 

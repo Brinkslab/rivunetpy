@@ -16,7 +16,7 @@ FORCE = True
 
 if __name__ == '__main__':
 
-    filename = 'data/Synthetic-no-bg-double-size.tif'
+    filename = 'data/Synthetic-no-bg.tif'
 
     img = loadtiff3d(filename, out='SITK') # Original Image
 

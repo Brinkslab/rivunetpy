@@ -42,10 +42,11 @@ def rolling_ball_removal(img):
 
 
 def apply_threshold(img, mthd='Otsu'):
-    img = copy.copy(img)
     if mthd not in THRESHOLD_OPTIONS:
         raise ValueError(f'Invalid method keyword: {mthd}, please use one of the following options: \n'
                          f'{list(THRESHOLD_OPTIONS.keys())}')
+    if type(img) is np.ndarray:
+        img = sitk.GetImageFromArray(img)
 
     filter = THRESHOLD_OPTIONS[mthd]()
     filter.SetInsideValue(0)

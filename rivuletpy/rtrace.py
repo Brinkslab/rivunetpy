@@ -22,23 +22,29 @@ def show_logo():
 888   T88b 888   Y88P    \"Y88888 888  \"Y8888   \"Y888       888888888\n"""
     print(s)
 
-def main(file=None, out=None, threshold=0, zoom_factor=1, save_soma=False,
+def main(file=None, out=None, threshold=None, zoom_factor=1, save_soma=False,
          speed=False, quality=False, clean=True, non_stop=False, npush=0,
          silent=False, skeletonize=False, view=False, tracing_resolution=1.0, vtk=False, slicer=False):
     starttime = time.time()
     img = loadimg(file, tracing_resolution)
-    imgdtype = img.dtype
+
+    # img = sitk.ReadImage(file, imageIO='TIFFImageIO')
     imgshape = img.shape
-    imgmin = img.min()
-    imgmax = img.max()
+
 
     if threshold is None:
-        _, threshold = apply_threshold(img)
+        bb, threshold = apply_threshold(img, mthd='Max Entropy')
     elif type(threshold) is str:
-        _, threshold = apply_threshold(img, mthd=threshold)
+        bb, threshold = apply_threshold(img, mthd=threshold)
+
+    # import matplotlib.pyplot as plt
+    # from rivuletpy.utils.plottools import flatten
+    # plt.imshow(flatten(bb))
+    # plt.show()
 
     if not silent:
-        print('The shape of the image is', img.shape)
+        pass
+        # print('The shape of the image is', img.shape)
     # Modify the crop function so that it can crop somamask as well
     img, crop_region = crop(img, threshold)  # Crop by default
 
