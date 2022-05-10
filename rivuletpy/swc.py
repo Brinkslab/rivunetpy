@@ -1,3 +1,4 @@
+import copy
 import math
 import numpy as np
 import time
@@ -54,13 +55,6 @@ class SWC(object):
     def add(self, swc_nodes):
         np.vstack((self._data, swc_nodes))
 
-    def set_view_density(self, perc):
-        assert 1 <= perc <= 100, 'Quantile of segments (in %) to plot should be between 1 and 100'
-        self.swc_density = perc
-
-    def set_fanciness(self, fancy):
-        self.swc_fancy = fancy
-
     def add_branch(self, branch, pidx=None, random_color=False):
         '''
         Add a branch to swc.
@@ -102,6 +96,53 @@ class SWC(object):
             self._data[minidx, 6] = tail[0]
 
         self._data = np.vstack((self._data, new_branch))
+
+    def clean(self):
+        SampleIDs = self._data[:, 0].astype(int)  # SampleID
+
+        swc_dict, swc_children, swc_ends, swc_indices = self.swc_to_dicts()
+
+        # Map from old SampleIDs to NewSampleIDs. Index is old SampleID
+        mapper = np.full(np.amax(SampleIDs)+1, np.NaN, dtype=int)
+
+        ROOT_ID = 0
+
+        ID = ROOT_ID
+
+        def assign_ID(current_node):
+            nonlocal ID
+            nonlocal mapper
+            nonlocal swc_ends
+
+            new_ID = ID
+
+            mapper[current_node] = new_ID
+
+            ID += 1
+            if current_node in swc_ends:
+                pass
+            else:
+                for child_node in swc_children[current_node]:
+                    if child_node == current_node:
+                        continue  # Avoid attractors, e.g. the root
+                    else:
+                        assign_ID(child_node)
+
+        assign_ID(ID)
+
+        # index_mapper = np.full_like(mapper, np.NaN)
+        # for index, SampleID in enumerate(SampleIDs):
+        #     index_mapper[SampleID] = index
+
+        new_data = np.zeros((np.amax(mapper) + 1, 7))
+
+        for data_line, old_SampleID in zip(self._data, SampleIDs):
+            new_SampleID = mapper[old_SampleID]
+            new_ParentID = mapper[int(data_line[-1])]
+
+            new_data[new_SampleID, :] = np.concatenate([[new_SampleID], data_line[1:-1], [new_ParentID]])
+
+        self._data = new_data
 
     def _prune_leaves(self):
         # Find all the leaves
@@ -220,6 +261,13 @@ class SWC(object):
     def save(self, fname):
         saveswc(fname, self._data)
 
+    def set_view_density(self, perc):
+        assert 1 <= perc <= 100, 'Quantile of segments (in %) to plot should be between 1 and 100'
+        self.swc_density = perc
+
+    def set_fanciness(self, fancy):
+        self.swc_fancy = fancy
+
     def get_array(self):
         return self._data[:, :7]
 
@@ -268,7 +316,7 @@ class SWC(object):
         swc_dict = {}
         swc_children = {}
         swc_indices = {}
-        for ii, line in enumerate(self._data):
+        for ii, line in enumerate(copy.copy(self._data).astype(int)):
             SampleID, ParentID = (line[0], line[-1])
 
             swc_dict[SampleID] = ParentID
@@ -284,7 +332,7 @@ class SWC(object):
         swc_ends = []
         for SampleID, ParentID in swc_dict.items():
             if SampleID not in swc_children:
-                swc_ends.append(SampleID)
+                swc_ends.append(int(SampleID))
 
         return swc_dict, swc_children, swc_ends, swc_indices
 
@@ -502,9 +550,11 @@ class SWC(object):
 
         lid = self._data[:, 0]
 
-        # Plot square by default, always turn off frame
-        if kwargs == {}:
-            kwargs = {'figsize': [6.4, 6.4]}
+        pseudo_shape = np.amax(self._data[:, 2:5], axis=0) - np.amin(self._data[:, 2:5], axis=0)
+        smallest_dim = np.argmin(pseudo_shape)
+
+        # Plot square by default, always turn off frame        if kwargs == {}:
+        kwargs = {'figsize': [6.4, 6.4]}
         kwargs['frameon'] = False
 
         if 'ax' in kwargs:  # Plotting directly to axes
@@ -536,16 +586,22 @@ class SWC(object):
             # Draw a line between this node and its parent
             if ii < self._data.shape[0] - 1 and self._data[ii, 0] == self._data[ii + 1, -1]:
                 # print(f'Plot\t{translated[ii, :]}\t{translated[ii + 1, :]}')
-                ax.plot(translated[ii:ii + 2, 0], translated[ii:ii + 2, 1], color=line_color)
+                if smallest_dim == 0:
+                    ax.plot(translated[ii:ii + 2, 1], translated[ii:ii + 2, 2], color=line_color)
+                elif smallest_dim == 1:
+                    ax.plot(translated[ii:ii + 2, 0], translated[ii:ii + 2, 2], color=line_color)
+                else:
+                    ax.plot(translated[ii:ii + 2, 0], translated[ii:ii + 2, 1], color=line_color)
 
             else:
-                pid = self._data[ii, -1]
-                pidx = np.argwhere(pid == lid)
-                pidx = np.squeeze(pidx, axis=1)  # Remove unnecessary dimension
-                if len(pidx) == 1:
-                    # print(f'Plot\t{translated[ii, :]}\t{translated[pidx, :].flatten()}')
-                    x_indices = np.concatenate([[ii], pidx])
-                    ax.plot(translated[x_indices, 0], translated[x_indices, 1], color=line_color)
+                pass
+                # pid = self._data[ii, -1]
+                # pidx = np.argwhere(pid == lid)
+                # pidx = np.squeeze(pidx, axis=1)  # Remove unnecessary dimension
+                # if len(pidx) == 1:
+                #     # print(f'Plot\t{translated[ii, :]}\t{translated[pidx, :].flatten()}')
+                #     x_indices = np.concatenate([[ii], pidx])
+                #     ax.plot(translated[x_indices, 0], translated[x_indices, 1], color=line_color)
 
         if AX_SET:
             return None
