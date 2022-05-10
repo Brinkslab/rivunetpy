@@ -10,7 +10,7 @@ from rivuletpy.utils.io import loadswc
 from rivuletpy.utils.plottools import flatten
 from rivuletpy.utils.plottools import volume_show, volume_view
 
-FILENAME = 'data/Image5.v3dpbd.tif'
+FILENAME = 'data/Image4.v3dpbd.tif'
 FORCE = True  # Force recalculation of SWC
 
 if __name__ == '__main__':

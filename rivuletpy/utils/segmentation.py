@@ -291,7 +291,7 @@ class NeuronSegmentor:
         neurons: Images of the individual neurons.
     """
 
-    def __init__(self, img: Image, threshold: Union[int, float] = None, aggressiveness=1.0):
+    def __init__(self, img: Image, threshold: Union[int, float] = None, strict=True):
         """Segment an image of multiple neurons.
 
         A progress bar is shown to indicate the approximate progress.
@@ -300,10 +300,6 @@ class NeuronSegmentor:
             img: Input image that will be segmented.
             threshold (float, optional): Optional manual threshold setting. If no threshold is passed,
               Maximum Entropy thresholding will be used for the initial thresholding of the image.
-            aggressiveness (float, optional): Optional setting that, increases the likelyhood of
-              correctly grouping pixels belonging to each cell. Controls how agressive the thresholding is when
-              adding pixels to the neuron regions. "Normal" value is 1. Should be a value between 0-2 (0%
-              and 200%).
 
         Raises:
             ValueError: If the threshold is not a number.
@@ -311,7 +307,7 @@ class NeuronSegmentor:
         print('Starting segmentation')
         self.img = img
         self.PixelID = self.img.GetPixelID()
-        self.aggressiveness = aggressiveness
+        self.strict = strict
         if threshold is None:
             threshold_filter = sitk.MaximumEntropyThresholdImageFilter()
             threshold_filter.SetInsideValue(1)
@@ -574,14 +570,20 @@ class NeuronSegmentor:
 
         self.components = sitk.ConnectedComponent(mask)
 
-        dist_filter = sitk.SignedDanielssonDistanceMapImageFilter()
-        dist_filter.Execute(self.components)
-        voronoi = dist_filter.GetVoronoiMap()
+        if self.strict:
+            stats = sitk.LabelIntensityStatisticsImageFilter()
+            stats.Execute(self.components, self.img)
 
-        stats = sitk.LabelIntensityStatisticsImageFilter()
-        stats.Execute(voronoi, self.img)
+            return self.components, stats.GetLabels()
+        else:
+            dist_filter = sitk.SignedDanielssonDistanceMapImageFilter()
+            dist_filter.Execute(self.components)
+            voronoi = dist_filter.GetVoronoiMap()
 
-        return voronoi, stats.GetLabels()
+            stats = sitk.LabelIntensityStatisticsImageFilter()
+            stats.Execute(voronoi, self.img)
+
+            return voronoi, stats.GetLabels()
 
     def __make_neuron_images(self) -> list:
         """Create images containing single neurons using the labeled region image.

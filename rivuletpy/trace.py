@@ -59,14 +59,14 @@ class R2Tracer(Tracer):
         self._bimg = (img > threshold).astype('int')  # Segment image
 
         if not self._silent:
-            print('(1) --Detecting Soma...', end='')
+            print('\t(1) --Detecting Soma...', end='')
         self._soma = Soma()
         self._soma.detect(self._bimg, not self._quality, self._silent)
         self._prep()
 
         # Iterative Back Tracking with Erasing
         if not self._silent:
-            print('(5) --Start Backtracking with {} ...'.format(
+            print('\t(5) --Start Backtracking with {} ...'.format(
                 'non stop' if self._non_stop else 'standard stopping criteria'))
         swc = self._iterative_backtrack()
 
@@ -77,7 +77,7 @@ class R2Tracer(Tracer):
 
     def _prep(self):
         if self.skeletonize:
-            print('Skeletonize the binary image...')
+            print('\tSkeletonize the binary image...')
             self._bimg = skeletonize_3d(self._bimg)
             self._bimg = binary_dilation(self._bimg, iterations=1)
 
@@ -88,14 +88,14 @@ class R2Tracer(Tracer):
         self._dilated_bimg = binary_dilation(self._bimg)
 
         if not self._silent:
-            print('(2) --Boundary DT...')
+            print('\t(2) --Boundary DT...')
         self._make_dt()
         if not self._silent:
-            print('(3) --Fast Marching with %s quality...' %
+            print('\t(3) --Fast Marching with %s quality...' %
                   ('high' if self._quality else 'low'))
         self._fast_marching()
         if not self._silent:
-            print('(4) --Compute Gradients...')
+            print('\t(4) --Compute Gradients...')
         self._make_grad()
 
         # Make copy of the timemap

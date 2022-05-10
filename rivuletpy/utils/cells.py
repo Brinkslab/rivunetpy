@@ -13,9 +13,8 @@ class Neuron:
     swc: SWC = None
     swc_fname: str = None
 
-    def add_SWC(self, swc: SWC):
+    def add_SWC(self, swc):
         self.swc = swc
-        self.image = None
-
+        self.img = None
 
 

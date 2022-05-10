@@ -51,7 +51,7 @@ def main(file=None, out=None, threshold=None, zoom_factor=1, save_soma=False,
 
     if zoom_factor != 1.:
         if not silent:
-            print('-- Zooming image to %.2f of original size' %
+            print('\t-- Zooming image to %.2f of original size' %
                   zoom_factor)
         img = zoom(img, zoom_factor)
 
@@ -64,11 +64,11 @@ def main(file=None, out=None, threshold=None, zoom_factor=1, save_soma=False,
                       skeletonize=skeletonize)
 
     swc, soma = tracer.trace(img, threshold)
-    print('-- Finished: %.2f sec.' % (time.time() - starttime))
+    print('\t-- Finished: %.2f sec.' % (time.time() - starttime))
 
     # if skeletonized, re-estimate the radius for each node
     if skeletonize:
-        print('Re-estimating radius...')
+        print('\tRe-estimating radius...')
         swc_arr = swc.get_array()
         for i in range(swc_arr.shape[0]):
             swc_arr[i, 5] = estimate_radius(swc_arr[i, 2:5], img > threshold)
@@ -89,18 +89,18 @@ def main(file=None, out=None, threshold=None, zoom_factor=1, save_soma=False,
 
     # Save to vtk is required
     if vtk:
-        print('Saving to SWC format...')
+        print('\tSaving to SWC format...')
         swc.save(outpath.replace('.vtk', '.swc'))
 
         if not file.endswith('.tif'):
-            print('Converting to world space...')
+            print('\tConverting to world space...')
             img = sitk.ReadImage(file)
             swcarr = swc2world(swc.get_array(),
                                img,
                                [tracing_resolution] * 3,
                                slicer=slicer)
             swc._data[:, :7] = swcarr
-        print('Saving to VTK format...')
+        print('\tSaving to VTK format...')
         swc2vtk(swc, outpath.replace('.swc', '.vtk'))
 
     if view:
