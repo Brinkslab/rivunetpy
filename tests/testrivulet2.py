@@ -15,15 +15,11 @@ FORCE = True  # Force recalculation of SWC
 
 if __name__ == '__main__':
 
-    # out_name = FILENAME.replace('.tif', '.swc')
+    # image = ReadImage(FILENAME, imageIO='TIFFImageIO')
+    #
+    # fig, ax = plt.subplots(1, 3)
 
-    image = ReadImage(FILENAME, imageIO='TIFFImageIO')
-
-    fig, ax = plt.subplots(1, 3)
-
-    out_name = None
-    if out_name is None or (not os.path.exists(out_name)) or FORCE:
-        rtrace.main(file=FILENAME, out=out_name)
+    rtrace.main(file=FILENAME)
 
     # swc_mat = loadswc(out_name)
     # s = SWC()

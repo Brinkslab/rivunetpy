@@ -16,14 +16,14 @@ FORCE = True
 
 if __name__ == '__main__':
 
-    filename = 'data/Synthetic-no-bg.tif'
+    filename = 'data/synthetic-3-cells.tif'
 
     img = loadtiff3d(filename, out='SITK') # Original Image
 
     neurons = NeuronSegmentor(img)
     neurons.plot_full_segmentation()
 
-    neuron_images = neurons.neuron_images
+    neuron_images = neurons.neurons
 
     pass
 

@@ -9,6 +9,7 @@ from rivuletpy.utils.io import loadimg, crop, swc2world, swc2vtk
 from rivuletpy.utils.filtering import apply_threshold
 from rivuletpy.trace import estimate_radius
 
+# TODO: Remove this API
 
 def show_logo():
     s = "====================Welcome to Rivulet2=================================="
@@ -27,8 +28,8 @@ def main(file=None, out=None, threshold=None, zoom_factor=1, save_soma=False,
          silent=False, skeletonize=False, view=False, tracing_resolution=1.0, vtk=False, slicer=False):
     starttime = time.time()
     img = loadimg(file, tracing_resolution)
+    img = sitk.GetArrayFromImage(img)
 
-    # img = sitk.ReadImage(file, imageIO='TIFFImageIO')
     imgshape = img.shape
 
 

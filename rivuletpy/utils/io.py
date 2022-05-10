@@ -1,7 +1,10 @@
 import os
+
 import numpy as np
 from scipy import io as sio
 import SimpleITK as sitk
+from SimpleITK.SimpleITK import Image
+
 
 def loadimg(file, target_resolution, ):
     if file.endswith('.mat'):
@@ -10,10 +13,9 @@ def loadimg(file, target_resolution, ):
         for z in range(img.shape[-1]):  # Flip the image upside down
             img[:, :, z] = np.flipud(img[:, :, z])
         img = np.swapaxes(img, 0, 1)
+        img = sitk.GetArrayFromImage(img)
     elif file.endswith('.tif'):
-        img = loadtiff3d(file)
-        img = np.swapaxes(img, 0, 2)
-        img = np.flip(img, axis=1)
+        img = loadtiff3d(file, out='SITK')
     elif file.endswith('.mhd'):
         from scipy.ndimage.interpolation import zoom
         mhd = sitk.ReadImage(file)
@@ -25,14 +27,15 @@ def loadimg(file, target_resolution, ):
                          sy / target_resolution,
                          sx / target_resolution), order=0)
         img = np.transpose(img, (2, 1, 0))
+        img = sitk.GetArrayFromImage(img)
     elif file.endswith('.nii') or file.endswith('.nii.gz'):
         import nibabel as nib
         img = nib.load(file)
         img = img.get_data()
+        img = sitk.GetArrayFromImage(img)
     else:
         raise IOError("The extension of " + file +
                       'is not supported. File extension supported are: *.tif, *.mat, *.nii')
-
 
     # img = reduce_to_8_bit(img, strict=True, report=True)
 
@@ -50,6 +53,7 @@ def loadtiff3d(filepath, out='Numpy'):
     else:
         raise ValueError(f'Invalid output format {out}, please use either "Numpy" or "SITK"')
     return im
+
 
 def writetiff3d(filepath, block):
     from libtiff import TIFF
@@ -95,6 +99,14 @@ def saveswc(filepath, swc):
 
 def crop(img, thr):
     """Crop a 3D block with value > thr"""
+    sitk_flag = False
+    if type(img) is Image:
+        img: Image
+        sitk_ID = img.GetPixelID()
+        img = sitk.GetArrayFromImage(img)
+
+        sitk_flag = True
+
     ind = np.argwhere(img > thr)
     x = ind[:, 0]
     y = ind[:, 1]
@@ -106,8 +118,13 @@ def crop(img, thr):
     zmin = max(z.min() - 10, 2)
     zmax = min(z.max() + 10, img.shape[2])
 
-    return img[xmin:xmax, ymin:ymax, zmin:zmax], np.array(
-        [[xmin, xmax], [ymin, ymax], [zmin, zmax]])
+    if sitk_flag:
+        return (
+            sitk.Cast(sitk.GetImageFromArray(img[xmin:xmax, ymin:ymax, zmin:zmax]), sitk_ID),
+            np.array([[xmin, xmax], [ymin, ymax], [zmin, zmax]])
+        )
+    else:
+        return img[xmin:xmax, ymin:ymax, zmin:zmax], np.array([[xmin, xmax], [ymin, ymax], [zmin, zmax]])
 
 
 def world2ras(voxpos):

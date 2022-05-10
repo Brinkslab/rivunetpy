@@ -51,7 +51,9 @@ def apply_threshold(img, mthd='Otsu'):
     filter = THRESHOLD_OPTIONS[mthd]()
     filter.SetInsideValue(0)
     filter.SetOutsideValue(1)
-    binary = filter.Execute(img)
+    filter.Execute(img)
     threshold = filter.GetThreshold()
+
+    binary = img > threshold
 
     return binary, int(threshold)

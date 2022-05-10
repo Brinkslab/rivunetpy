@@ -23,7 +23,7 @@ A_PRIORI_NUM = 3
 num_found = []
 MSE = []
 
-filename = 'data/Synthetic-no-bg.tif'
+filename = 'data/synthetic-3-cells.tif'
 
 
 fig, axs = plt.subplots(2, 4, dpi=300)

@@ -59,7 +59,7 @@ class R2Tracer(Tracer):
         self._bimg = (img > threshold).astype('int')  # Segment image
 
         if not self._silent:
-            print('(1) -- Detecting Soma...', end='')
+            print('(1) --Detecting Soma...', end='')
         self._soma = Soma()
         self._soma.detect(self._bimg, not self._quality, self._silent)
         self._prep()

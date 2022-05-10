@@ -14,6 +14,7 @@ filtering/riveal.py
 filtering/thresholding.py
 rivuletpy/__init__.py
 rivuletpy/rtrace.py
+rivuletpy/rtrace_net.py
 rivuletpy/soma.py
 rivuletpy/swc.py
 rivuletpy/trace.py
@@ -27,6 +28,7 @@ rivuletpy/msfm/_msfm.h
 rivuletpy/msfm/common.c
 rivuletpy/msfm/msfmmodule.c
 rivuletpy/utils/__init__.py
+rivuletpy/utils/cells.py
 rivuletpy/utils/color.py
 rivuletpy/utils/filtering.py
 rivuletpy/utils/io.py

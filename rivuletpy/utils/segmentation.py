@@ -20,6 +20,7 @@ from tqdm import tqdm
 import SimpleITK as sitk
 from SimpleITK.SimpleITK import Image
 
+from rivuletpy.utils.cells import Neuron
 from rivuletpy.utils.plottools import flatten
 from rivuletpy.utils.metrics import euclidean_distance
 
@@ -281,15 +282,16 @@ class NeuronSegmentor:
     Attributes:
         img (Image): Input image
         threshold (float): Threshold used in the initial processing steps.
+        aggressiveness (float): How agressive the thresholding is when adding pixels to the neuron regions.
         binary (Image): Binarized version of the input image
         soma_scale (int): Scale of the largest soma in the image.
         soma_seeds (np.ndarray): Locations of all the individual somata in the image.
         neurite_scale (int): The approximate scale of the neurites in the image.
         regions (Image): An image where each region in which a single neuron lies is labeled by a unique intensity value.
-        neuron_images: Images of the individual neurons.
+        neurons: Images of the individual neurons.
     """
 
-    def __init__(self, img: Image, threshold: Union[int, float] = None):
+    def __init__(self, img: Image, threshold: Union[int, float] = None, aggressiveness=1.0):
         """Segment an image of multiple neurons.
 
         A progress bar is shown to indicate the approximate progress.
@@ -298,6 +300,10 @@ class NeuronSegmentor:
             img: Input image that will be segmented.
             threshold (float, optional): Optional manual threshold setting. If no threshold is passed,
               Maximum Entropy thresholding will be used for the initial thresholding of the image.
+            aggressiveness (float, optional): Optional setting that, increases the likelyhood of
+              correctly grouping pixels belonging to each cell. Controls how agressive the thresholding is when
+              adding pixels to the neuron regions. "Normal" value is 1. Should be a value between 0-2 (0%
+              and 200%).
 
         Raises:
             ValueError: If the threshold is not a number.
@@ -305,6 +311,7 @@ class NeuronSegmentor:
         print('Starting segmentation')
         self.img = img
         self.PixelID = self.img.GetPixelID()
+        self.aggressiveness = aggressiveness
         if threshold is None:
             threshold_filter = sitk.MaximumEntropyThresholdImageFilter()
             threshold_filter.SetInsideValue(1)
@@ -319,9 +326,11 @@ class NeuronSegmentor:
 
         self.binary = self.img > self.threshold
 
+        self.components = None
+
         with tqdm(total=100) as pbar:
             self.soma_scale = self.__find_soma_scale()
-            pbar.update(1)  # Update values weighted
+            pbar.update(1)  # Update values weighted by function duration
 
             self.soma_seeds = self.__find_soma_seeds()
             pbar.update(16)
@@ -344,7 +353,7 @@ class NeuronSegmentor:
             self.regions, self.__region_labels = self.__find_regions()
             pbar.update(50)
 
-            self.neuron_images = self.__make_neuron_images()
+            self.neurons = self.__make_neuron_images()
             pbar.update(11)
 
     def __str__(self):
@@ -531,28 +540,42 @@ class NeuronSegmentor:
             tuple: A tuple containing a labeled image and a list of the labels in this image. Each labeled area in the
               image should contain a single neuron.
         """
-        threshold_filter = sitk.TriangleThresholdImageFilter()
+        # threshold_filter = sitk.LiThresholdImageFilter()
+        # threshold_filter.SetInsideValue(1)
+        # threshold_filter.SetOutsideValue(0)
+        # threshold_filter.Execute(self.__composite_image)
+        # threshold = threshold_filter.GetThreshold()
+        #
+        # mask = sitk.ConnectedThreshold(self.__composite_image,
+        #                                           seedList=self.soma_seeds.tolist(),
+        #                                           lower=int(threshold * max(2 - self.aggressiveness, 0)),
+        #                                           upper=65535)
+
+        threshold_filter = sitk.OtsuThresholdImageFilter()
         threshold_filter.SetInsideValue(1)
         threshold_filter.SetOutsideValue(0)
         threshold_filter.Execute(self.__composite_image)
-
         threshold = threshold_filter.GetThreshold()
 
-        mask = sitk.ConnectedThreshold(self.__composite_image,
-                                       seedList=self.soma_seeds.tolist(),
-                                       lower=threshold,
-                                       upper=65535)
+        mask = self.__composite_image > threshold
+
 
         dilate_filter = sitk.BinaryDilateImageFilter()
-        dilate_filter.SetKernelRadius(self.neurite_scale)
+        dilate_filter.SetKernelRadius(self.soma_scale)
         dilate_filter.SetForegroundValue(1)
-
         mask = dilate_filter.Execute(mask)
 
-        components = sitk.ConnectedComponent(mask)
+        neighborhood_filter = sitk.NeighborhoodConnectedImageFilter()
+        for seed in self.soma_seeds.tolist():
+            neighborhood_filter.AddSeed(seed)
+        neighborhood_filter.SetUpper(1)
+        neighborhood_filter.SetLower(1)
+        mask = neighborhood_filter.Execute(mask)
+
+        self.components = sitk.ConnectedComponent(mask)
 
         dist_filter = sitk.SignedDanielssonDistanceMapImageFilter()
-        dist_filter.Execute(components)
+        dist_filter.Execute(self.components)
         voronoi = dist_filter.GetVoronoiMap()
 
         stats = sitk.LabelIntensityStatisticsImageFilter()
@@ -564,15 +587,15 @@ class NeuronSegmentor:
         """Create images containing single neurons using the labeled region image.
 
         Returns:
-            list: List of images, each containing a single neuron.
+            list: List of items of cell dataclass, each containing an image of single neuron.
         """
-        neuron_images = []
-        for label in self.__region_labels:
+        neurons = []
+        for ii, label in enumerate(self.__region_labels):
             region = self.regions == label
             image = self.img * sitk.Cast(region, self.PixelID)
-            neuron_images.append(image)
+            neurons.append(Neuron(image, num=ii))
 
-        return neuron_images
+        return neurons
 
     def plot(self):
         """Simple plotting.
@@ -608,7 +631,9 @@ class NeuronSegmentor:
         shape = self.regions.GetSize()
         plt.title(f'{len(self.__region_labels)} Labeled neurons')
 
-        for ii, image in enumerate(self.neuron_images[::-1]):
+        neuron_images = [neuron.img for neuron in self.neurons]
+
+        for ii, image in enumerate(neuron_images[::-1]):
             cmap = matplotlib.cm.get_cmap(cmaps[ii%num_cmaps])
 
             # Create color map with step in alpha channel
@@ -671,22 +696,22 @@ class NeuronSegmentor:
         plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 5)
-        plt.title(f'Neurites only, size={self.neurite_scale} px')
-        plt.imshow(flatten(self.__neurite_img), cmap='gray', interpolation='none')
-        plt.colorbar()
-        plt.axis('off')
-
-        ax = fig.add_subplot(2, 4, 6)
-        plt.title('Frangi')
+        plt.title(f'Frangi. Neurite size ={self.neurite_scale} px')
         plt.imshow(flatten(self.__neurite_frangi), cmap='gray', interpolation='none')
         plt.colorbar()
         plt.axis('off')
 
-        ax = fig.add_subplot(2, 4, 7)
+        ax = fig.add_subplot(2, 4, 6)
         plt.title('Composite image')
         plt.imshow(flatten(self.__composite_image), cmap='gray', interpolation='none')
         plt.axis('off')
         plt.colorbar()
+
+        ax = fig.add_subplot(2, 4, 7)
+        plt.title(f'Final components')
+        plt.imshow(flatten(self.components), cmap='nipy_spectral', interpolation='none')
+        plt.colorbar()
+        plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 8)
         plt.title('Regions')

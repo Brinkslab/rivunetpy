@@ -19,22 +19,22 @@ if __name__ == '__main__':
 
     plt.style.use('dark_background')
 
-    filename = 'data/Synthetic-no-bg.tif'
+    filename = 'data/synthetic-3-cells.tif'
 
     img = loadtiff3d(filename, out='SITK') # Original Image
 
     swcs = []
 
-    imgs_out = os.path.splitext(filename)[0] + str(0).zfill(3) + '.nr.tif'
-    if (not os.path.exists(imgs_out)) or FORCE:
+    filenames_out = os.path.splitext(filename)[0] + str(0).zfill(3) + '.nr.tif'
+    if (not os.path.exists(filenames_out)) or FORCE:
         neurons = NeuronSegmentor(img)
 
-        for ii, neuron_img in enumerate(neurons.neuron_images):
-            imgs_out = os.path.splitext(filename)[0] + str(ii).zfill(3) + '.nr.tif'
-            sitk.WriteImage(neuron_img, imgs_out)
-            print(f'Saved neuron to: {imgs_out}')
+        for ii, neuron_img in enumerate(neurons.neurons):
+            filenames_out = os.path.splitext(filename)[0] + str(ii).zfill(3) + '.nr.tif'
+            sitk.WriteImage(neuron_img, filenames_out)
+            print(f'Saved neuron to: {filenames_out}')
 
-        neuron_images = neurons.neuron_images
+        neuron_images = neurons.neurons
     else:
         neuron_images = []
         dirname, fname = os.path.split(filename)
