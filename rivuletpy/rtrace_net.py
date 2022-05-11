@@ -66,11 +66,8 @@ def trace_single(neuron, threshold):
                 swc_arr[i, 5] = estimate_radius(swc_arr[i, 2:5], img > reg_thresh)
             swc._data = swc_arr
 
-        print(swc._data.shape)
         swc.clean()
 
-        # fname = r'H:\rivuletpy\tests\data\test_swc_postprocessing\neuron_0001.r2t.soma.tif'
-        # soma.save(f'H:\\rivuletpy\\tests\\data\\test_swc_postprocessing\\neuron{neuron.num}.r2t.soma.tif')
         swc.apply_soma_TypeID(soma)
 
         swc.reset(crop_region, 1)
@@ -112,6 +109,7 @@ def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True,
             os.mkdir(save_dir)
 
         neuronsegmentor = NeuronSegmentor(img, strict=strict_seg)
+        neuronsegmentor.plot()
         neurons = neuronsegmentor.neurons
 
         for ii, neuron in enumerate(neurons):
