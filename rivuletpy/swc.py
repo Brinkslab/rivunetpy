@@ -37,6 +37,17 @@ from rivuletpy.utils.io import saveswc
 from rivuletpy.utils.metrics import euclidean_distance
 from rivuletpy.utils.color import RGB_from_hex
 
+LABELS = {-1 : 'Root',
+          0  : 'Undefined',
+          1  : 'Soma',
+          2  : 'Axon',
+          3  : '(Basal) Dendrite',
+          4  : 'Apical Dentrite',
+          5  : 'Branch Point',
+          6  : 'End Point',
+          7  : 'Other'}
+
+COLORS = list(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 
 class SWC(object):
 
@@ -509,6 +520,23 @@ class SWC(object):
         assembly.SetOrigin(center)
         return assembly
 
+    @staticmethod
+    def get_TypeID_label(typeid: int):
+        typeid = int(typeid)
+        # Clip label between -1 and 7
+        typeid = max(typeid, -1)
+        typeid = min(typeid, 7)
+
+        return LABELS[typeid]
+
+    @staticmethod
+    def get_TypeID_color(typeid: int):
+        typeid = int(typeid)
+        typeid = max(typeid, -1)
+        typeid = min(typeid, 7)
+        return COLORS[typeid + 1]
+
+
     def as_image(self, **kwargs):
         """Exports SWC data as 2D image.
 
@@ -553,9 +581,10 @@ class SWC(object):
         pseudo_shape = np.amax(self._data[:, 2:5], axis=0) - np.amin(self._data[:, 2:5], axis=0)
         smallest_dim = np.argmin(pseudo_shape)
 
-        # Plot square by default, always turn off frame        if kwargs == {}:
-        kwargs = {'figsize': [6.4, 6.4]}
-        kwargs['frameon'] = False
+        # Plot square by default, always turn off frame
+        if kwargs == {}:
+            kwargs = {'figsize': [6.4, 6.4]}
+            kwargs['frameon'] = False
 
         if 'ax' in kwargs:  # Plotting directly to axes
             AX_SET = True
@@ -567,41 +596,44 @@ class SWC(object):
 
             canvas = FigureCanvasAgg(fig)
             ax = fig.add_subplot()
-            ax.set_axis_off()
 
-        prop_cycle = plt.rcParams['axes.prop_cycle']
-        colors = cycle(prop_cycle.by_key()['color'])
-        line_color = next(colors)
+
+
 
         segments = self._data.shape[0]
         if segments > MAX_SEGMENTS:
             print(f'Too many ({segments}) segments to plot. Limiting plot to {MAX_SEGMENTS} segments.')
             segments = MAX_SEGMENTS
 
+        XYZ_indecies = np.array([0, 1, 2])
         for ii in range(segments):
-            # Change color if its a bifurcation
-            if (self._data[ii, 0] == self._data[:, -1]).sum() > 1:
-                line_color = next(colors)
+
+            TypeID = self._data[ii, 1]
 
             # Draw a line between this node and its parent
-            if ii < self._data.shape[0] - 1 and self._data[ii, 0] == self._data[ii + 1, -1]:
-                # print(f'Plot\t{translated[ii, :]}\t{translated[ii + 1, :]}')
-                if smallest_dim == 0:
-                    ax.plot(translated[ii:ii + 2, 1], translated[ii:ii + 2, 2], color=line_color)
-                elif smallest_dim == 1:
-                    ax.plot(translated[ii:ii + 2, 0], translated[ii:ii + 2, 2], color=line_color)
-                else:
-                    ax.plot(translated[ii:ii + 2, 0], translated[ii:ii + 2, 1], color=line_color)
-
+            if ii < self._data.shape[0] - 1 and self._data[ii, -1] == self._data[ii - 1, 0]:
+                # Fast track: if ParentID of current node matches SampleID of previous node
+                coord_index = np.delete(XYZ_indecies, smallest_dim)
+                ax.plot(
+                    translated[ii - 1:ii + 1, coord_index[0]],
+                    translated[ii - 1:ii + 1, coord_index[1]],
+                    color=self.get_TypeID_color(TypeID),
+                    label=self.get_TypeID_label(TypeID)
+                )
             else:
-                pass
-                # pid = self._data[ii, -1]
-                # pidx = np.argwhere(pid == lid)
-                # pidx = np.squeeze(pidx, axis=1)  # Remove unnecessary dimension
-                # if len(pidx) == 1:
-                #     # print(f'Plot\t{translated[ii, :]}\t{translated[pidx, :].flatten()}')
-                #     x_indices = np.concatenate([[ii], pidx])
-                #     ax.plot(translated[x_indices, 0], translated[x_indices, 1], color=line_color)
+                # If there is a "less nice" data structure (i.e. parent node NOT before current node in data)
+                pid = self._data[ii, -1]
+                pidx = np.argwhere(pid == lid)      # Find all parentIDs
+                pidx = np.squeeze(pidx, axis=1)     # Remove unnecessary dimension
+                for pidx_sel in pidx:
+                    indices = np.concatenate([[ii], [pidx_sel]])
+                    coord_index = np.delete(XYZ_indecies, smallest_dim)
+                    ax.plot(
+                        translated[indices, coord_index[0]],
+                        translated[indices, coord_index[1]],
+                        color=self.get_TypeID_color(TypeID),
+                        label=self.get_TypeID_label(TypeID)
+                    )
 
         if AX_SET:
             return None
