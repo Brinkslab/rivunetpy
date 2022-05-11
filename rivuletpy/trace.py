@@ -113,8 +113,8 @@ class R2Tracer(Tracer):
             self._tt < 0, self._bimg > 0).sum()
 
         self._coverage = self._cover_ctr_new / self._nforeground
-        if not self._silent:
-            self._pbar.update(self._cover_ctr_new - self._cover_ctr_old)
+
+        self._pbar.update(self._cover_ctr_new - self._cover_ctr_old)
         self._cover_ctr_old = self._cover_ctr_new
 
     def _make_grad(self):
@@ -227,8 +227,8 @@ class R2Tracer(Tracer):
                                 self._soma.radius, -1, 1.])
         swc.add(np.reshape(soma_node, (1, 8)))
 
-        if not self._silent:
-            self._pbar = tqdm(total=math.floor(self._nforeground * self._target_coverage))
+
+        self._pbar = tqdm(total=math.floor(self._nforeground * self._target_coverage))
 
         # Loop for all branches
         while self._coverage < self._target_coverage:

@@ -1,6 +1,5 @@
 import os
-from multiprocessing import Pool, TimeoutError, Array, Manager
-from typing import Callable
+from multiprocessing import Pool
 
 import time
 import SimpleITK as sitk
@@ -14,19 +13,18 @@ from rivuletpy.trace import estimate_radius
 from rivuletpy.utils.segmentation import NeuronSegmentor
 from rivuletpy.utils.cells import Neuron
 
-FORCE_RETRACE = False
 RIVULET_2_TREE_IMG_EXT = '{}r2t{}tif'.format(os.extsep, os.extsep)
 RIVULET_2_TREE_SWC_EXT = '{}r2t{}swc'.format(os.extsep, os.extsep)
 
 def check_long_ext(file_to_check, ext):
     return file_to_check.split(os.extsep, 1)[-1] == ext.split(os.extsep, 1)[-1]
 
-def trace_single(neuron, threshold):
+def trace_single(neuron, threshold, speed, quality, force_retrace):
     starttime = time.time()
     img = neuron.img
     neuron.swc_fname = '{}{}'.format(neuron.img_fname.split(RIVULET_2_TREE_IMG_EXT)[0], RIVULET_2_TREE_SWC_EXT)
 
-    if os.path.exists(neuron.swc_fname) and not FORCE_RETRACE:
+    if os.path.exists(neuron.swc_fname) and not force_retrace:
         swc_mat = loadswc(neuron.swc_fname)
         swc = SWC()
         swc._data = swc_mat
@@ -43,20 +41,20 @@ def trace_single(neuron, threshold):
         img = sitk.GetArrayFromImage(img)
 
         img, crop_region = crop(img, reg_thresh)  # Crop by default
-        print(f'Neuron ({neuron.num})\t --Tracing neuron of shape {img.shape}\n'
-              f'\twith a threshold of {reg_thresh}')
+        print(f'Neuron ({neuron.num})\t --Tracing neuron of shape {img.shape} '
+              f'with a threshold of {reg_thresh}')
 
         # Run rivulet2 for the first time
         skeletonize = False
-        tracer = R2Tracer(quality=False,
-                          silent=False,
-                          speed=False,
+        tracer = R2Tracer(quality=quality,
+                          silent=True,
+                          speed=speed,
                           clean=True,
                           non_stop=False,
                           skeletonize=skeletonize)
 
         swc, soma = tracer.trace(img, reg_thresh)
-        print('-- Finished: %.2f sec.' % (time.time() - starttime))
+        print('Neuron ({})\t -- Finished: {:.2f} sec.'.format(neuron.num, time.time() - starttime))
 
         # if skeletonized, re-estimate the radius for each node
         if skeletonize:
@@ -77,9 +75,8 @@ def trace_single(neuron, threshold):
 
     return neuron
 
-def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True,
-              speed=False, quality=False, clean=True, non_stop=False,
-              silent=False, skeletonize=False, asynchronous=True):
+def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True, force_recalculate=False,
+              speed=False, quality=False, asynchronous=True):
 
     if threshold is not None and type(threshold) not in (int, float, str):
         raise TypeError('Expected threshold to be either of type str, specifiying an automatic thresholding method \n',
@@ -94,7 +91,7 @@ def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True,
     save_dir = os.path.join(img_dir, dir_out)
 
     if (os.path.exists(save_dir)
-            and not FORCE_RETRACE
+            and not force_recalculate
             and any([check_long_ext(fname, RIVULET_2_TREE_IMG_EXT) for fname in os.listdir(save_dir)])):
         neurons = []
         for fname in os.listdir(save_dir):
@@ -120,21 +117,17 @@ def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True,
             sitk.WriteImage(neuron.img, neuron.img_fname)
         print(f'Segmented image into {len(neurons)} neurons.')
 
-    # manager = Manager()
-    # shared_list = manager.list()
     result_buffers = []
     with Pool(processes=os.cpu_count() - 1) as pool:
 
         if asynchronous:
             for neuron in neurons:
-                result_buffer = pool.apply_async(trace_single, (neuron, threshold))
+                result_buffer = pool.apply_async(trace_single, (neuron, threshold, speed, quality, force_recalculate))
                 result_buffers.append(result_buffer)
 
             results = [result_buffer.get() for result_buffer in result_buffers]
         else:
             for neuron in neurons:
-                result_buffers.append(trace_single(neuron, threshold))
+                result_buffers.append(trace_single(neuron, threshold, speed, quality, force_recalculate))
 
             results = result_buffers
-
-        print(results)
