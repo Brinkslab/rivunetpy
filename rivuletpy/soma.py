@@ -22,13 +22,17 @@ __author__ = "Donghao Zhang <zdhpeter1991@gmail.com>, Siqi Liu <lsqshr@gmail.com
 
 from itertools import cycle
 import math
+
 import numpy as np
 from scipy.ndimage import binary_dilation, binary_erosion
 from scipy.ndimage import gaussian_filter, gaussian_gradient_magnitude
 from scipy.ndimage.measurements import center_of_mass
 from scipy.ndimage.morphology import generate_binary_structure
-from rivuletpy.utils.io import writetiff3d
 import skfmm
+import SimpleITK as sitk
+
+from rivuletpy.utils.io import writetiff3d
+
 
 
 class Soma(object):
@@ -252,7 +256,9 @@ class Soma(object):
                            constant_values=0)
 
     def save(self, fname):
-        writetiff3d(fname, self.mask * 255)
+        print(fname)
+        sitk.WriteImage(sitk.Cast(sitk.GetImageFromArray(self.mask * 255), sitk.sitkUInt8), fname)
+        # writetiff3d(fname, self.mask * 255)
 
 
 class Fcycle(object):

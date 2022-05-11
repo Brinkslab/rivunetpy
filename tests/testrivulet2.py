@@ -10,16 +10,12 @@ from rivuletpy.utils.io import loadswc
 from rivuletpy.utils.plottools import flatten
 from rivuletpy.utils.plottools import volume_show, volume_view
 
-FILENAME = 'data/Image4.v3dpbd.tif'
+FILENAME = 'data/test_swc_postprocessing/neuron_0001.r2t.tif'
 FORCE = True  # Force recalculation of SWC
 
 if __name__ == '__main__':
 
-    # image = ReadImage(FILENAME, imageIO='TIFFImageIO')
-    #
-    # fig, ax = plt.subplots(1, 3)
-
-    rtrace.main(file=FILENAME)
+    rtrace.main(file=FILENAME, save_soma=True)
 
     # swc_mat = loadswc(out_name)
     # s = SWC()

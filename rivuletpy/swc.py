@@ -34,6 +34,7 @@ from vtkmodules.vtkRenderingCore import (
 )
 
 from rivuletpy.utils.io import saveswc
+from rivuletpy.soma import Soma
 from rivuletpy.utils.metrics import euclidean_distance
 from rivuletpy.utils.color import RGB_from_hex
 
@@ -145,15 +146,34 @@ class SWC(object):
         # for index, SampleID in enumerate(SampleIDs):
         #     index_mapper[SampleID] = index
 
-        new_data = np.zeros((np.amax(mapper) + 1, 7))
-
+        new_data = np.zeros((np.amax(mapper) + 1, self._data.shape[1]))
+        add_conf = self._data.shape[1] == 8
         for data_line, old_SampleID in zip(self._data, SampleIDs):
             new_SampleID = mapper[old_SampleID]
-            new_ParentID = mapper[int(data_line[-1])]
+            new_ParentID = mapper[int(data_line[6])]
 
-            new_data[new_SampleID, :] = np.concatenate([[new_SampleID], data_line[1:-1], [new_ParentID]])
+            new_data[new_SampleID, :] = data_line
+            new_data[new_SampleID, 0] = new_SampleID
+            new_data[new_SampleID, 6] = new_ParentID
+
 
         self._data = new_data
+
+
+
+    def apply_soma_TypeID(self, soma: Soma):
+
+        mask = soma.mask.flatten()
+        indices = np.ravel_multi_index(self._data[:, [2, 3, 4]].astype(int).T, soma.mask.shape)
+        for ii, pos in enumerate(indices):
+            if mask[pos]:
+                # If in mask apply ID
+                self._data[ii, 1] = 1
+
+        # Set TypeID of point 0 to -1 (Root).
+        self._data[0, 1] = -1
+
+
 
     def _prune_leaves(self):
         # Find all the leaves
@@ -324,11 +344,12 @@ class SWC(object):
 
     def swc_to_dicts(self):
         # Create connectivity dictionary
+
         swc_dict = {}
         swc_children = {}
         swc_indices = {}
         for ii, line in enumerate(copy.copy(self._data).astype(int)):
-            SampleID, ParentID = (line[0], line[-1])
+            SampleID, ParentID = (line[0], line[6])
 
             swc_dict[SampleID] = ParentID
             swc_indices[SampleID] = ii
@@ -536,6 +557,71 @@ class SWC(object):
         typeid = min(typeid, 7)
         return COLORS[typeid + 1]
 
+    def extents(self):
+        return np.amax(self._data[:, 2:5], axis=0) - np.amin(self._data[:, 2:5], axis=0)
+
+    def _plot(self, ax, center_fig, linewidths=None):
+        MAX_SEGMENTS = 2_500
+
+        pseudo_shape = self.extents()
+        smallest_dim = np.argmin(pseudo_shape)
+
+        segments = self._data.shape[0]
+        if segments > MAX_SEGMENTS:
+            print(f'Too many ({segments}) segments to plot. Limiting plot to {MAX_SEGMENTS} segments.')
+            segments = MAX_SEGMENTS
+
+        XYZ_indecies = np.array([0, 1, 2])
+        XYZ_labels = ['X [px]', 'Y [px]', 'Z [px]']
+        x_lab, y_lab = np.delete(XYZ_labels, smallest_dim)
+        ax.set_xlabel(x_lab)
+        ax.set_ylabel(y_lab)
+
+
+
+        # Compute the center of mass
+        center = self._data[:, 2:5].mean(axis=0)
+
+        translated = self._data[:, 2:5] - \
+                     np.tile(center, (self._data.shape[0], 1)) * center_fig
+
+        lid = self._data[:, 0]
+
+        if linewidths is None:
+            linewidths = np.full(segments, 1.5)
+
+        for ii in range(segments):
+
+            TypeID = self._data[ii, 1]
+
+            # Draw a line between this node and its parent
+            if ii < self._data.shape[0] - 1 and self._data[ii, -1] == self._data[ii - 1, 0]:
+                # Fast track: if ParentID of current node matches SampleID of previous node
+                coord_index = np.delete(XYZ_indecies, smallest_dim)
+
+                ax.plot(
+                    translated[ii - 1:ii + 1, coord_index[0]],
+                    translated[ii - 1:ii + 1, coord_index[1]],
+                    color=self.get_TypeID_color(TypeID),
+                    label=self.get_TypeID_label(TypeID),
+                    linewidth=linewidths[ii]
+                )
+
+            else:
+                # If there is a "less nice" data structure (i.e. parent node NOT before current node in data)
+                pid = self._data[ii, -1]
+                pidx = np.argwhere(pid == lid)      # Find all parentIDs
+                pidx = np.squeeze(pidx, axis=1)     # Remove unnecessary dimension
+                for pidx_sel in pidx:
+                    indices = np.concatenate([[ii], [pidx_sel]])
+                    coord_index = np.delete(XYZ_indecies, smallest_dim)
+                    ax.plot(
+                        translated[indices, coord_index[0]],
+                        translated[indices, coord_index[1]],
+                        color=self.get_TypeID_color(TypeID),
+                        label=self.get_TypeID_label(TypeID),
+                        linewidth=linewidths[ii]
+                    )
 
     def as_image(self, **kwargs):
         """Exports SWC data as 2D image.
@@ -568,18 +654,10 @@ class SWC(object):
             >>> s.as_image(ax=ax)
 
         """
-
-        MAX_SEGMENTS = 2_500
-
-        # Compute the center of mass
-        center = self._data[:, 2:5].mean(axis=0)
-        translated = self._data[:, 2:5] - \
-                     np.tile(center, (self._data.shape[0], 1))
-
-        lid = self._data[:, 0]
-
-        pseudo_shape = np.amax(self._data[:, 2:5], axis=0) - np.amin(self._data[:, 2:5], axis=0)
-        smallest_dim = np.argmin(pseudo_shape)
+        if 'center_fig' in kwargs:
+            center_fig = bool(kwargs['center_fig'])
+        else:
+            center_fig = False
 
         # Plot square by default, always turn off frame
         if kwargs == {}:
@@ -597,43 +675,32 @@ class SWC(object):
             canvas = FigureCanvasAgg(fig)
             ax = fig.add_subplot()
 
+        if 'fig' in kwargs: # Line thickness can be varied thanks to DPI info
 
+            fig = kwargs['fig']
 
+            bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            fig_width, height = bbox.width, bbox.height
 
-        segments = self._data.shape[0]
-        if segments > MAX_SEGMENTS:
-            print(f'Too many ({segments}) segments to plot. Limiting plot to {MAX_SEGMENTS} segments.')
-            segments = MAX_SEGMENTS
+            fig_width *= 72 # Units pt
 
-        XYZ_indecies = np.array([0, 1, 2])
-        for ii in range(segments):
+            vary_line = True
+        else:
+            vary_line = False
 
-            TypeID = self._data[ii, 1]
+        self._plot(ax, center_fig)
 
-            # Draw a line between this node and its parent
-            if ii < self._data.shape[0] - 1 and self._data[ii, -1] == self._data[ii - 1, 0]:
-                # Fast track: if ParentID of current node matches SampleID of previous node
-                coord_index = np.delete(XYZ_indecies, smallest_dim)
-                ax.plot(
-                    translated[ii - 1:ii + 1, coord_index[0]],
-                    translated[ii - 1:ii + 1, coord_index[1]],
-                    color=self.get_TypeID_color(TypeID),
-                    label=self.get_TypeID_label(TypeID)
-                )
-            else:
-                # If there is a "less nice" data structure (i.e. parent node NOT before current node in data)
-                pid = self._data[ii, -1]
-                pidx = np.argwhere(pid == lid)      # Find all parentIDs
-                pidx = np.squeeze(pidx, axis=1)     # Remove unnecessary dimension
-                for pidx_sel in pidx:
-                    indices = np.concatenate([[ii], [pidx_sel]])
-                    coord_index = np.delete(XYZ_indecies, smallest_dim)
-                    ax.plot(
-                        translated[indices, coord_index[0]],
-                        translated[indices, coord_index[1]],
-                        color=self.get_TypeID_color(TypeID),
-                        label=self.get_TypeID_label(TypeID)
-                    )
+        if vary_line:
+            # Use existing plot to retrieve width of plot in px. Needed to accurately scale linewidths
+            limits = ax.get_xlim()
+            fig_px_per_img_px = fig_width / abs(limits[1] - limits[0])
+
+            linewidths = self._data[:, 5] * 2   # Linewidths in data units
+            linewidths *= fig_px_per_img_px     # Linewidths in pt
+
+            ax.cla() # Clear old plot
+
+            self._plot(ax, center_fig, linewidths=linewidths)
 
         if AX_SET:
             return None
