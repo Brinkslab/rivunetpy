@@ -3,8 +3,8 @@ swc2_path = r'C:\Users\twh\PycharmProjects\rivuletpy\tests\data\Image5-soma.v3dp
 
 import matplotlib.pyplot as plt
 
-from rivuletpy.swc import SWC
-from rivuletpy.utils.io import loadswc
+from rivunetpy.swc import SWC
+from rivunetpy.utils.io import loadswc
 
 
 swcs = []

@@ -1,5 +1,5 @@
-from rivuletpy.utils.metrics import *
-from rivuletpy.utils.io import *
+from rivunetpy.utils.metrics import *
+from rivunetpy.utils.io import *
 from os.path import join
 
 datapath = 'tests/data'

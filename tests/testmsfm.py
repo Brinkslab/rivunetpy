@@ -1,5 +1,5 @@
 import msfm
-from rivuletpy.utils.io import *
+from rivunetpy.utils.io import *
 import skfmm
 import os
 

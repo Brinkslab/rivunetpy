@@ -3,8 +3,8 @@ import SimpleITK as sitk
 import matplotlib as plt
 from itertools import cycle
 
-from rivuletpy.swc import SWC
-from rivuletpy.utils.volume_rendering_vtk import (volumeRender, vtk_create_renderer, set_camera,
+from rivunetpy.swc import SWC
+from rivunetpy.utils.volume_rendering_vtk import (volumeRender, vtk_create_renderer, set_camera,
                                                   vtk_show, vtk_basic, get_tf)
 
 def flatten(image, whitebackground=False):

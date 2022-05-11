@@ -28,7 +28,7 @@
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  -->
 
-# Rivuletpy-Net
+# RivuNetpy
 ## Example Neuron Tracings
 ![alt text](meta/rivulet2_showcase.png "neuron showcase")
 
@@ -49,7 +49,7 @@ The predecessor Rivulet1 was published on Neuroinformatics:
 "Rivulet: 3D Neuron Morphology Tracing with Iterative Back-Tracking", 
 Neuroinformatics, Vol.14, Issue 4, pp387-401, 2016.
 
-## Rivulet-net is being developed to do parallel tracing of *networks* of neurons.
+## RivuNet is being developed to do parallel tracing of *networks* of neurons.
 
 ## Issues / questions / pull requests
 
@@ -62,7 +62,7 @@ $ source activate riv
 ```
 
 ### 1. Setup the dependencies
-To install rivuletpy with pip, you need to install the following packages manually beforehand since some dependencies of rivuletpy uses them in their setup scripts
+To install RivuNetpy with pip, you need to install the following packages manually beforehand since some dependencies of rivuletpy uses them in their setup scripts
 * `numpy>=1.8.0`
 * `scipy>=0.17.0`
 * `Cython>=0.25.1`
@@ -76,8 +76,8 @@ To install rivuletpy with pip, you need to install the following packages manual
 (riv)$ conda install -c simpleitk simpleitk  # Install SimpleITK for the support of load mhd
 ```
 
-### 2. Install Up-to-date Rivuletpy from source
-Optionally you can install Rivuletpy from the source files
+### 2. Install Up-to-date RivuNetpy from source
+Optionally you can install RivuNetpy from the source files
 
 ```
 (riv)$ git clone https://github.com/twhoekstra/rivuletpy
@@ -92,7 +92,7 @@ This will download a simple neuron image and perform a neuron tracing with rivul
 - Reconstruct multiple neurons in a single image
 
 ```python
-from rivuletpy import rtracenet
+from rivunetpy import rtracenet
 
 if __name__ == '__main__':
     filename = r'data\3-cells.tif'

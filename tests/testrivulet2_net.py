@@ -1,4 +1,4 @@
-from rivuletpy import rtracenet
+from rivunetpy import rtracenet
 
 import time
 

@@ -1,5 +1,5 @@
 from filtering.anisotropic import *
-from rivuletpy.utils.io import * 
+from rivunetpy.utils.io import *
 import matplotlib.pyplot as plt
 from scipy import io as sio
 

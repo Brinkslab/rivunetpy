@@ -1,5 +1,5 @@
 from filtering.morphology import ssm
-from rivuletpy.utils.io import loadimg
+from rivunetpy.utils.io import loadimg
 import matplotlib.pyplot as plt
 import skfmm
 

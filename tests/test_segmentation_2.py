@@ -9,8 +9,8 @@ from skimage.filters import threshold_otsu
 from mpl_toolkits.axes_grid1.inset_locator import (InsetPosition)
 import SimpleITK as sitk
 
-from rivuletpy.utils.io import loadtiff3d
-from rivuletpy.utils.plottools import volume_show, volume_view, imshow_flatten
+from rivunetpy.utils.io import loadtiff3d
+from rivunetpy.utils.plottools import volume_show, volume_view, imshow_flatten
 
 plt.style.use('dark_background')
 

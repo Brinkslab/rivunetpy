@@ -1,5 +1,5 @@
 from os import path
-from rivuletpy.utils.io import * 
+from rivunetpy.utils.io import *
 from filtering.thresholding import fuzzy
 import matplotlib.pyplot as plt
 

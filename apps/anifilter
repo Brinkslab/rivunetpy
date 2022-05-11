@@ -2,7 +2,7 @@
 
 import argparse
 import nibabel as nib
-from rivuletpy.utils.io import *
+from rivunetpy.utils.io import *
 from filtering.anisotropic import response
 import skfmm
 

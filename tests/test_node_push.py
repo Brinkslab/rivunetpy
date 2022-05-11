@@ -1,9 +1,9 @@
 # Load swc
 import SimpleITK as sitk
-from rivuletpy.utils.io import loadswc, loadimg
-from rivuletpy.swc import SWC
+from rivunetpy.utils.io import loadswc, loadimg
+from rivunetpy.swc import SWC
 
-from rivuletpy.utils.io import swc2world, swc2vtk
+from rivunetpy.utils.io import swc2world, swc2vtk
 
 swc_mat = loadswc(
     '/home/z003s24h/Desktop/zhoubing_vessel_example/mask/Anonymous EJRH_16.r2.swc')

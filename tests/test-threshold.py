@@ -2,8 +2,8 @@ import os
 
 import numpy as np
 import matplotlib.pyplot as plt
-from rivuletpy.utils.io import loadswc
-from rivuletpy.swc import SWC
+from rivunetpy.utils.io import loadswc
+from rivunetpy.swc import SWC
 from skimage.io import imread
 from skimage.util import img_as_ubyte
 from skimage.filters import threshold_otsu

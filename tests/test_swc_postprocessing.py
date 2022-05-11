@@ -2,15 +2,12 @@
 import matplotlib.pyplot as plt
 import SimpleITK as sitk
 
-from rivuletpy import rtrace
-from rivuletpy.swc import SWC
-from rivuletpy.utils.io import loadswc
-from rivuletpy.utils.plottools import flatten
-from rivuletpy.utils.plottools import volume_show, volume_view
+from rivunetpy.swc import SWC
+from rivunetpy.utils.io import loadswc
 
 if __name__ == '__main__':
 
-    original_filename = r'H:\rivuletpy\tests\data\test_swc_postprocessing\neuron_0001_original.r2t.swc'
+    original_filename = r'H:\rivuletpy\tests\data\test_swc_postprocessing\.r2t.swc'
     cleaned_filename = r'H:\rivuletpy\tests\data\test_swc_postprocessing\neuron_0001_cleaned.r2t.swc'
     soma_labeled_filename = r'H:\rivuletpy\tests\data\test_swc_postprocessing\neuron_0001.r2t.swc'
 

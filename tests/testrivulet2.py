@@ -4,11 +4,11 @@ from SimpleITK import ReadImage
 import matplotlib.pyplot as plt
 from skimage.io import imread
 
-from rivuletpy import rtrace
-from rivuletpy.swc import SWC
-from rivuletpy.utils.io import loadswc
-from rivuletpy.utils.plottools import flatten
-from rivuletpy.utils.plottools import volume_show, volume_view
+from rivunetpy import rtrace
+from rivunetpy.swc import SWC
+from rivunetpy.utils.io import loadswc
+from rivunetpy.utils.plottools import flatten
+from rivunetpy.utils.plottools import volume_show, volume_view
 
 FILENAME = 'data/test_swc_postprocessing/neuron_0001.r2t.tif'
 FORCE = True  # Force recalculation of SWC

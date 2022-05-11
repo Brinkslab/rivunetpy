@@ -5,7 +5,7 @@ somasnakes
 Original package is adjusted for soma detection by donghaozhang and siqiliu.
 
 This soma submodule can be used for soma detection only, but this submodule is
-currently embedded in rivuletpy. The soma mask can be generate by setting
+currently embedded in rivunetpy. The soma mask can be generate by setting
 its corresponding argument. Soma detection requires an initial soma centroid,
 estimated somatic radius and grayscale neuron image. Soma growth is based on
 the Morphological Active Contours without Edges algorithm.  The original paper
@@ -15,7 +15,7 @@ The soma growth algorithm can converge by applying the sliding window.
 Journal Rivulet Paper : Rivulet: 3D Neuron Morphology Tracing
 with Iterative Back-Tracking Conference Rivulet Paper : Reconstruction
  of 3D neuron morphology using Rivulet back-tracking
-soma is a submodule of rivuletpy
+soma is a submodule of rivunetpy
 """
 
 __author__ = "Donghao Zhang <zdhpeter1991@gmail.com>, Siqi Liu <lsqshr@gmail.com>"
@@ -31,7 +31,7 @@ from scipy.ndimage.morphology import generate_binary_structure
 import skfmm
 import SimpleITK as sitk
 
-from rivuletpy.utils.io import writetiff3d
+from rivunetpy.utils.io import writetiff3d
 
 
 

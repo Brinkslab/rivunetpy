@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from vtk.util.vtkConstants import VTK_UNSIGNED_CHAR
 
-from rivuletpy.utils.color import RGB_from_hex
+from rivunetpy.utils.color import RGB_from_hex
 
 def get_tf(data): # Get transfer functions
     q = mquantiles(data.flatten(), [0.7, 0.98])

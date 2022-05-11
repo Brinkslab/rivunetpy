@@ -33,10 +33,10 @@ from vtkmodules.vtkRenderingCore import (
     vtkPolyDataMapper,
 )
 
-from rivuletpy.utils.io import saveswc
-from rivuletpy.soma import Soma
-from rivuletpy.utils.metrics import euclidean_distance
-from rivuletpy.utils.color import RGB_from_hex
+from rivunetpy.utils.io import saveswc
+from rivunetpy.soma import Soma
+from rivunetpy.utils.metrics import euclidean_distance
+from rivunetpy.utils.color import RGB_from_hex
 
 LABELS = {-1 : 'Root',
           0  : 'Undefined',
@@ -303,7 +303,7 @@ class SWC(object):
         return self._data[:, :7]
 
     def view(self):
-        from rivuletpy.utils.rendering3 import Viewer3, Line3
+        from rivunetpy.utils.rendering3 import Viewer3, Line3
 
         # Compute the center of mass
         center = self._data[:, 2:5].mean(axis=0)

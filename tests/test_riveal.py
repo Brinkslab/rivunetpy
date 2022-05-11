@@ -1,5 +1,5 @@
 from filtering.riveal import riveal
-from rivuletpy.utils.io import *
+from rivunetpy.utils.io import *
 from filtering.thresholding import rescale
 
 img = loadimg('tests/data/test.tif')

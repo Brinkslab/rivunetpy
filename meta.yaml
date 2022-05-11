@@ -1,0 +1,37 @@
+{% set name = "rivunetpy" %}
+{% set version = "0.3.0" %}
+
+package:
+  name: "{{ name|lower }}"
+  version: "{{ version }}"
+
+source:
+  git_rev: "{{ version }}"
+  git_url: https://github.com/twhoekstra/rivuletpy
+
+requirements:
+  build:
+    - python
+    - setuptools
+    - numpy x.x
+
+  run:
+    - python
+    - numpy x.x
+    - tqdm
+    - scipy
+    - Cython
+    - scikit-fmm
+    - scikit-image
+    - matplotlib
+    - SimpleITK
+    - nibabel
+    - vtk
+
+
+test:
+  imports:
+    - rivunetpy
+
+about:
+  home: https://github.com/twhoekstra/rivuletpy

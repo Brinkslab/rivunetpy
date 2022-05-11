@@ -20,9 +20,9 @@ from tqdm import tqdm
 import SimpleITK as sitk
 from SimpleITK.SimpleITK import Image
 
-from rivuletpy.utils.cells import Neuron
-from rivuletpy.utils.plottools import flatten
-from rivuletpy.utils.metrics import euclidean_distance
+from rivunetpy.utils.cells import Neuron
+from rivunetpy.utils.plottools import flatten
+from rivunetpy.utils.metrics import euclidean_distance
 
 
 def max_between_stacks(*images) -> Image:

@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 import os
 import sys
-from rivuletpy.utils.io import loadswc, saveswc, loadimg
-from rivuletpy.trace import estimate_radius
+from rivunetpy.utils.io import loadswc, saveswc, loadimg
+from rivunetpy.trace import estimate_radius
 import argparse
 
 if __name__ == '__main__':

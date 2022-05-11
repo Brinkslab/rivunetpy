@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from SimpleITK.SimpleITK import Image
 
-from rivuletpy.swc import SWC
+from rivunetpy.swc import SWC
 
 @dataclass
 class Neuron:

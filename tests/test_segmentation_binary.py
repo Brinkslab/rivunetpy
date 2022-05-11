@@ -5,13 +5,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import SimpleITK as sitk
 
-from rivuletpy.trace import R2Tracer
-from rivuletpy.utils.io import loadtiff3d
-from rivuletpy.swc import SWC
-from rivuletpy.utils.io import loadswc
-from rivuletpy.utils.plottools import volume_show, volume_view, flatten
-from rivuletpy.utils.filtering import apply_threshold, rolling_ball_removal
-from rivuletpy.utils.segmentation import NeuronSegmentor
+from rivunetpy.trace import R2Tracer
+from rivunetpy.utils.io import loadtiff3d
+from rivunetpy.swc import SWC
+from rivunetpy.utils.io import loadswc
+from rivunetpy.utils.plottools import volume_show, volume_view, flatten
+from rivunetpy.utils.filtering import apply_threshold, rolling_ball_removal
+from rivunetpy.utils.segmentation import NeuronSegmentor
 
 FORCE = False
 

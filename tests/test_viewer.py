@@ -1,5 +1,5 @@
-from rivuletpy.utils.io import loadswc
-from rivuletpy.swc import SWC
+from rivunetpy.utils.io import loadswc
+from rivunetpy.swc import SWC
 
 swc_mat = loadswc('data/Series021.v3dpbd.swc')
 s = SWC()

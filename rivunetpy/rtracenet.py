@@ -4,17 +4,17 @@ from multiprocessing import Pool
 import time
 import SimpleITK as sitk
 
-from rivuletpy.trace import R2Tracer
-from rivuletpy.swc import SWC
-from rivuletpy.utils.io import loadswc
-from rivuletpy.utils.io import loadimg, crop
-from rivuletpy.utils.filtering import apply_threshold
-from rivuletpy.trace import estimate_radius
-from rivuletpy.utils.segmentation import NeuronSegmentor
-from rivuletpy.utils.cells import Neuron
+from rivunetpy.trace import R2Tracer
+from rivunetpy.swc import SWC
+from rivunetpy.utils.io import loadswc
+from rivunetpy.utils.io import loadimg, crop
+from rivunetpy.utils.filtering import apply_threshold
+from rivunetpy.trace import estimate_radius
+from rivunetpy.utils.segmentation import NeuronSegmentor
+from rivunetpy.utils.cells import Neuron
 
-RIVULET_2_TREE_IMG_EXT = '{}r2t{}tif'.format(os.extsep, os.extsep)
-RIVULET_2_TREE_SWC_EXT = '{}r2t{}swc'.format(os.extsep, os.extsep)
+RIVULET_2_TREE_IMG_EXT = '{}rnp{}tif'.format(os.extsep, os.extsep)
+RIVULET_2_TREE_SWC_EXT = '{}rnp{}swc'.format(os.extsep, os.extsep)
 
 def check_long_ext(file_to_check, ext):
     return file_to_check.split(os.extsep, 1)[-1] == ext.split(os.extsep, 1)[-1]

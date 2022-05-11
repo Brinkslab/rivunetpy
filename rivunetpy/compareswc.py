@@ -1,7 +1,7 @@
 import os, argparse, json
 
-from rivuletpy.utils.metrics import *
-from rivuletpy.utils.io import loadswc, saveswc
+from rivunetpy.utils.metrics import *
+from rivunetpy.utils.io import loadswc, saveswc
 
 def main(target, groundtruth, sigma=3):
 

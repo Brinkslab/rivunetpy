@@ -7,7 +7,7 @@ import random
 import string
 import subprocess
 from pathlib import Path
-from rivuletpy.utils.io import loadimg, writetiff3d
+from rivunetpy.utils.io import loadimg, writetiff3d
 from filtering.thresholding import suppress, rescale
 import skfmm
 from scipy.ndimage.filters import gaussian_filter, median_filter
