@@ -13,4 +13,5 @@ scripts/recon_my_tif.sh*
 src/*
 /tests/data/test-bitdepth/
 /tests/data/test_segmentation_binary/
+/tests/*
 /tests/
