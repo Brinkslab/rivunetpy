@@ -131,3 +131,5 @@ def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True, force_re
                 result_buffers.append(trace_single(neuron, threshold, speed, quality, force_recalculate))
 
             results = result_buffers
+
+    return results

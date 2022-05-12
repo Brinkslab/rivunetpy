@@ -126,11 +126,12 @@ class SWC(object):
             nonlocal mapper
             nonlocal swc_ends
 
+            ID += 1
             new_ID = ID
 
             mapper[current_node] = new_ID
 
-            ID += 1
+
             if current_node in swc_ends:
                 pass
             else:
@@ -152,9 +153,9 @@ class SWC(object):
             new_SampleID = mapper[old_SampleID]
             new_ParentID = mapper[int(data_line[6])]
 
-            new_data[new_SampleID, :] = data_line
-            new_data[new_SampleID, 0] = new_SampleID
-            new_data[new_SampleID, 6] = new_ParentID
+            new_data[new_SampleID - 1, :] = data_line
+            new_data[new_SampleID - 1, 0] = new_SampleID
+            new_data[new_SampleID - 1, 6] = new_ParentID
 
 
         self._data = new_data
@@ -170,8 +171,8 @@ class SWC(object):
                 # If in mask apply ID
                 self._data[ii, 1] = 1
 
-        # Set TypeID of point 0 to -1 (Root).
-        self._data[0, 1] = -1
+        # Set ParentID of point 0 to -1 (Root).
+        self._data[0, 6] = -1
 
 
 
