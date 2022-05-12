@@ -15,3 +15,4 @@ src/*
 /tests/data/test_segmentation_binary/
 /tests/*
 /tests/
+/requirements.txt

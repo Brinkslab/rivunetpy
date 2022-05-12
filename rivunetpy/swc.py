@@ -67,7 +67,7 @@ class SWC(object):
     def add(self, swc_nodes):
         np.vstack((self._data, swc_nodes))
 
-    def add_branch(self, branch, pidx=None, random_color=False):
+    def add_branch(self, branch, pidx=None, random_color=False, label=False):
         '''
         Add a branch to swc.
         Note: This swc is special with N X 8 shape. The 8-th column is the online confidence
@@ -90,11 +90,11 @@ class SWC(object):
                 pid = self._data[pidx, 0] if pidx is not None else -2
                 if pid != -2 and pid != 0 and self._data.shape[0] != 1:
                     # Its connected node is fork point
-                    self._data[self._data[:, 0] == pid, 1] = 5
+                    self._data[self._data[:, 0] == pid, 1] = 5 if label else 3
             else:
                 pid = id_start + i + 1
                 if i == 0:
-                    nodetype = 6  # Endpoint
+                    nodetype = 6 if label else 3 # Endpoint
 
             assert (pid != id)
             new_branch[i] = np.asarray([
