@@ -147,8 +147,7 @@ class SWC(object):
         # for index, SampleID in enumerate(SampleIDs):
         #     index_mapper[SampleID] = index
 
-        new_data = np.zeros((np.amax(mapper) + 1, self._data.shape[1]))
-        add_conf = self._data.shape[1] == 8
+        new_data = np.zeros((np.amax(mapper), self._data.shape[1]))
         for data_line, old_SampleID in zip(self._data, SampleIDs):
             new_SampleID = mapper[old_SampleID]
             new_ParentID = mapper[int(data_line[6])]
