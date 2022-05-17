@@ -33,7 +33,7 @@ from vtkmodules.vtkRenderingCore import (
     vtkPolyDataMapper,
 )
 
-from rivunetpy.utils.io import saveswc
+from rivunetpy.utils.io import saveswc, loadswc
 from rivunetpy.soma import Soma
 from rivunetpy.utils.metrics import euclidean_distance
 from rivunetpy.utils.color import RGB_from_hex
@@ -49,6 +49,7 @@ LABELS = {-1 : 'Root',
           7  : 'Other'}
 
 COLORS = list(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+
 
 class SWC(object):
 
@@ -117,9 +118,15 @@ class SWC(object):
         # Map from old SampleIDs to NewSampleIDs. Index is old SampleID
         mapper = np.full(np.amax(SampleIDs)+1, np.NaN, dtype=int)
 
-        ROOT_ID = 0
+        if -1 in swc_children.keys():
+            ROOT_ID = swc_children[-1][0] # ParentID of root is -1
+        elif any([key in value for key, value in swc_children.items()]): # Search for attractors
+            ii = np.argmax([key in value for key, value in swc_children.items()])
+            ROOT_ID = int(list(swc_children.keys())[ii])
+        else:
+            ROOT_ID = 0
 
-        ID = ROOT_ID
+        ID = 0 # Start ID
 
         def assign_ID(current_node):
             nonlocal ID
@@ -141,7 +148,7 @@ class SWC(object):
                     else:
                         assign_ID(child_node)
 
-        assign_ID(ID)
+        assign_ID(ROOT_ID)
 
         # index_mapper = np.full_like(mapper, np.NaN)
         # for index, SampleID in enumerate(SampleIDs):
@@ -159,7 +166,8 @@ class SWC(object):
 
         self._data = new_data
 
-
+        # Set ParentID of point 0 to -1 (Root).
+        self._data[0, 6] = -1
 
     def apply_soma_TypeID(self, soma: Soma):
 
@@ -170,7 +178,7 @@ class SWC(object):
                 # If in mask apply ID
                 self._data[ii, 1] = 1
 
-        # Set ParentID of point 0 to -1 (Root).
+        # Reset ParentID of point 0 to -1 (Root), as this might be changed by the mask
         self._data[0, 6] = -1
 
 
@@ -887,3 +895,23 @@ def connected_components(nodes):
 
     # Return the list of groups.
     return result
+
+
+
+
+def clean(filenames):
+    import os
+    from rivunetpy.utils.extensions import RIVULET_2_TREE_SWC_EXT
+
+    if type(filenames) is not list:
+        filenames = [filenames]
+
+    for filename in filenames:
+        swc_mat = loadswc(filename)
+        swc = SWC()
+        swc._data = swc_mat
+
+        swc.clean()
+
+        fname = os.path.splitext(filename)[0] + RIVULET_2_TREE_SWC_EXT
+        swc.save(fname)
