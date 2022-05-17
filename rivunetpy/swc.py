@@ -111,6 +111,9 @@ class SWC(object):
         self._data = np.vstack((self._data, new_branch))
 
     def clean(self):
+
+        sec_list = [1, 2, 3, 4] # Valid TypeIDs for NetPYne
+
         SampleIDs = self._data[:, 0].astype(int)  # SampleID
 
         swc_dict, swc_children, swc_ends, swc_indices = self.swc_to_dicts()
@@ -159,9 +162,12 @@ class SWC(object):
             new_SampleID = mapper[old_SampleID]
             new_ParentID = mapper[int(data_line[6])]
 
+
             new_data[new_SampleID - 1, :] = data_line
             new_data[new_SampleID - 1, 0] = new_SampleID
             new_data[new_SampleID - 1, 6] = new_ParentID
+
+        new_data[np.logical_not(np.isin(new_data[:, 1], sec_list)), 1] = 3 # All non-valid TypeIDs are converted to 3 (dendrite)
 
 
         self._data = new_data
