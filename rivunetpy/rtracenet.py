@@ -75,7 +75,7 @@ def trace_single(neuron, threshold, speed, quality, force_retrace):
     return neuron
 
 def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True, force_recalculate=False,
-              speed=False, quality=False, asynchronous=True):
+              speed=False, quality=False, asynchronous=True, voxel_size=()):
 
     if threshold is not None and type(threshold) not in (int, float, str):
         raise TypeError('Expected threshold to be either of type str, specifiying an automatic thresholding method \n',

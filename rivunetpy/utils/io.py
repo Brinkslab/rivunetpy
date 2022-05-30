@@ -79,6 +79,7 @@ def loadswc(filepath):
         lines = f.read().split("\n")
         for l in lines:
             if not l.startswith('#'):
+                l = l.strip()
                 cells = l.split(' ')
                 if len(cells) == 7:
                     cells = [float(c) for c in cells]
