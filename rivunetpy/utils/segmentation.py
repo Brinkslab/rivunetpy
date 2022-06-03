@@ -95,6 +95,8 @@ def eval_hessian_scale(img: Image, img_list: list, scale: Union[int, float],
     frangi_filter.SetScaleObjectnessMeasure(scaled_to_eval)
     frangi_filter.SetObjectDimension(dimension)
 
+
+
     gaussian_filter = sitk.DiscreteGaussianImageFilter()
     gaussian_filter.SetMaximumKernelWidth(1000)
     gaussian_filter.SetUseImageSpacing(False)
@@ -104,9 +106,19 @@ def eval_hessian_scale(img: Image, img_list: list, scale: Union[int, float],
     img_blurred = sitk.RescaleIntensity(img_blurred, 0, 65535)
     img_blurred = sitk.Cast(img_blurred, sitk.sitkFloat32)
 
+    import matplotlib.pyplot as plt
+    plt.imshow(flatten(img_blurred))
+    plt.show()
 
 
     result = frangi_filter.Execute(img_blurred)
+
+    import matplotlib.pyplot as plt
+    plt.imshow(flatten(result))
+    plt.title('Result)')
+    plt.show()
+
+    x = result.GetDimension()
 
     if normalized:
         result = sitk.RescaleIntensity(result, 0, 1)
@@ -245,6 +257,11 @@ def get_seeds(img: Image, scale: int) -> np.ndarray:
           the geometry of that blob.
     """
     blobs = hessian_filter(img, [scale], dimension=0)
+
+    import matplotlib.pyplot as plt
+    plt.imshow(flatten(blobs))
+    plt.colorbar()
+    plt.show()
 
     blobs = sitk.RescaleIntensity(blobs, 0, 65535)  # 0-65535
 
