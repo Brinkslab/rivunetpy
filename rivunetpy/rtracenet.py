@@ -12,9 +12,8 @@ from rivunetpy.utils.filtering import apply_threshold
 from rivunetpy.trace import estimate_radius
 from rivunetpy.utils.segmentation import NeuronSegmentor
 from rivunetpy.utils.cells import Neuron
+from rivunetpy.utils.extensions import RIVULET_2_TREE_SWC_EXT, RIVULET_2_TREE_IMG_EXT
 
-RIVULET_2_TREE_IMG_EXT = '{}rnp{}tif'.format(os.extsep, os.extsep)
-RIVULET_2_TREE_SWC_EXT = '{}rnp{}swc'.format(os.extsep, os.extsep)
 
 def check_long_ext(file_to_check, ext):
     return file_to_check.split(os.extsep, 1)[-1] == ext.split(os.extsep, 1)[-1]
@@ -76,7 +75,7 @@ def trace_single(neuron, threshold, speed, quality, force_retrace):
     return neuron
 
 def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True, force_recalculate=False,
-              speed=False, quality=False, asynchronous=True):
+              speed=False, quality=False, asynchronous=True, voxel_size=()):
 
     if threshold is not None and type(threshold) not in (int, float, str):
         raise TypeError('Expected threshold to be either of type str, specifiying an automatic thresholding method \n',
@@ -106,7 +105,6 @@ def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True, force_re
             os.mkdir(save_dir)
 
         neuronsegmentor = NeuronSegmentor(img, strict=strict_seg)
-        neuronsegmentor.plot()
         neurons = neuronsegmentor.neurons
 
         for ii, neuron in enumerate(neurons):

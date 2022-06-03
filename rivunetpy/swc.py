@@ -33,7 +33,7 @@ from vtkmodules.vtkRenderingCore import (
     vtkPolyDataMapper,
 )
 
-from rivunetpy.utils.io import saveswc
+from rivunetpy.utils.io import saveswc, loadswc
 from rivunetpy.soma import Soma
 from rivunetpy.utils.metrics import euclidean_distance
 from rivunetpy.utils.color import RGB_from_hex
@@ -49,6 +49,7 @@ LABELS = {-1 : 'Root',
           7  : 'Other'}
 
 COLORS = list(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+
 
 class SWC(object):
 
@@ -110,6 +111,12 @@ class SWC(object):
         self._data = np.vstack((self._data, new_branch))
 
     def clean(self):
+
+        sec_list = [1, 2, 3, 4] # Valid TypeIDs for NetPYne
+        nanint = np.zeros(1)
+        nanint[0] = np.nan
+        nanint = nanint.astype(int)[0]
+
         SampleIDs = self._data[:, 0].astype(int)  # SampleID
 
         swc_dict, swc_children, swc_ends, swc_indices = self.swc_to_dicts()
@@ -117,9 +124,26 @@ class SWC(object):
         # Map from old SampleIDs to NewSampleIDs. Index is old SampleID
         mapper = np.full(np.amax(SampleIDs)+1, np.NaN, dtype=int)
 
-        ROOT_ID = 0
+        if -1 in swc_children.keys():
+            ROOT_ID = swc_children[-1][0] # ParentID of root is -1
+        elif any([key in value for key, value in swc_children.items()]): # Search for attractors
+            ii = np.argmax([key in value for key, value in swc_children.items()])
+            ROOT_ID = int(list(swc_children.keys())[ii])
+        else:
+            ROOT_ID = 0
 
-        ID = ROOT_ID
+        ID = 0 # Start ID
+
+        # Delete non-root attractors
+        root_index = np.argmax(SampleIDs == ROOT_ID)
+        attractor_ii = []
+        for ii, (SampleID, ParentID) in enumerate(self._data[:, [0, 6]]):
+            if SampleID == ParentID:
+                attractor_ii.append(ii)
+        attractor_ii = np.array(attractor_ii)
+        attractor_ii = attractor_ii[attractor_ii != root_index]
+        for ii in attractor_ii:
+            self._data = np.delete(self._data, ii, axis=0)
 
         def assign_ID(current_node):
             nonlocal ID
@@ -141,7 +165,10 @@ class SWC(object):
                     else:
                         assign_ID(child_node)
 
-        assign_ID(ID)
+        assign_ID(ROOT_ID)
+
+        assert (np.unique(mapper[mapper != nanint])
+                == np.sort(mapper[mapper != nanint])).all(), 'Incorrect mapper, doubly mapped indecies.'
 
         # index_mapper = np.full_like(mapper, np.NaN)
         # for index, SampleID in enumerate(SampleIDs):
@@ -149,17 +176,31 @@ class SWC(object):
 
         new_data = np.zeros((np.amax(mapper), self._data.shape[1]))
         for data_line, old_SampleID in zip(self._data, SampleIDs):
+
             new_SampleID = mapper[old_SampleID]
             new_ParentID = mapper[int(data_line[6])]
+
+            if new_SampleID == 473.0:
+                pass
 
             new_data[new_SampleID - 1, :] = data_line
             new_data[new_SampleID - 1, 0] = new_SampleID
             new_data[new_SampleID - 1, 6] = new_ParentID
 
+        new_data[np.logical_not(np.isin(new_data[:, 1], sec_list)), 1] = 3 # All non-valid TypeIDs are converted to 3 (dendrite)
+
+
 
         self._data = new_data
 
+        # Set ParentID of point 0 to -1 (Root).
+        self._data[0, 6] = -1
 
+        check = (self._data[:, 0] > self._data[:, 6]).all()
+        if not check:
+            ii = np.argmax(self._data[:, 0] <= self._data[:, 6])
+            raise AssertionError(f'At index {ii}, SampleID is {self._data[ii, 0]}, while '
+                                 f'ParentID is {self._data[ii, 6]}')
 
     def apply_soma_TypeID(self, soma: Soma):
 
@@ -170,7 +211,7 @@ class SWC(object):
                 # If in mask apply ID
                 self._data[ii, 1] = 1
 
-        # Set ParentID of point 0 to -1 (Root).
+        # Reset ParentID of point 0 to -1 (Root), as this might be changed by the mask
         self._data[0, 6] = -1
 
 
@@ -887,3 +928,24 @@ def connected_components(nodes):
 
     # Return the list of groups.
     return result
+
+
+
+
+def clean(filenames):
+    import os
+    from rivunetpy.utils.extensions import RIVULET_2_TREE_SWC_EXT
+
+    if type(filenames) is not list:
+        filenames = [filenames]
+
+    for filename in filenames:
+        swc_mat = loadswc(filename)
+        swc = SWC()
+        swc._data = swc_mat
+
+        # print(f'Cleaning {filename} ...')
+        swc.clean()
+
+        fname = os.path.splitext(filename)[0] + RIVULET_2_TREE_SWC_EXT
+        swc.save(fname)
