@@ -19,6 +19,8 @@ import numpy as np
 from tqdm import tqdm
 import SimpleITK as sitk
 from SimpleITK.SimpleITK import Image
+from skimage import data
+from skimage.feature import blob_dog, blob_log, blob_doh
 
 from rivunetpy.utils.cells import Neuron
 from rivunetpy.utils.plottools import flatten
@@ -106,17 +108,9 @@ def eval_hessian_scale(img: Image, img_list: list, scale: Union[int, float],
     img_blurred = sitk.RescaleIntensity(img_blurred, 0, 65535)
     img_blurred = sitk.Cast(img_blurred, sitk.sitkFloat32)
 
-    import matplotlib.pyplot as plt
-    plt.imshow(flatten(img_blurred))
-    plt.show()
-
 
     result = frangi_filter.Execute(img_blurred)
 
-    import matplotlib.pyplot as plt
-    plt.imshow(flatten(result))
-    plt.title('Result)')
-    plt.show()
 
     x = result.GetDimension()
 
@@ -256,39 +250,46 @@ def get_seeds(img: Image, scale: int) -> np.ndarray:
         np.ndarray: A ``numpy`` array of points, each lying on one blob in a location that is a-specific to
           the geometry of that blob.
     """
-    blobs = hessian_filter(img, [scale], dimension=0)
 
-    import matplotlib.pyplot as plt
-    plt.imshow(flatten(blobs))
-    plt.colorbar()
-    plt.show()
+    if img.GetDimension() == 3:
+        blobs = hessian_filter(img, [scale], scaled_to_eval=False, dimension=0)
 
-    blobs = sitk.RescaleIntensity(blobs, 0, 65535)  # 0-65535
+        blobs = sitk.RescaleIntensity(blobs, 0, 65535)  # 0-65535
 
-    blobs = sitk.Cast(blobs, sitk.sitkUInt16)
+        blobs = sitk.Cast(blobs, sitk.sitkUInt16)
 
-    gauss_filter = sitk.DiscreteGaussianImageFilter()
-    gauss_filter.SetUseImageSpacing(False)
-    gauss_filter.SetVariance(scale ** 2)  # Var is Sigma^2
-    gauss_filter.SetMaximumKernelWidth(1000)
-    blobs = gauss_filter.Execute(blobs)
+        gauss_filter = sitk.DiscreteGaussianImageFilter()
+        gauss_filter.SetUseImageSpacing(False)
+        gauss_filter.SetVariance(scale ** 2)  # Var is Sigma^2
+        gauss_filter.SetMaximumKernelWidth(1000)
+        blobs = gauss_filter.Execute(blobs)
 
-    threshold_filter = sitk.MaximumEntropyThresholdImageFilter()
-    threshold_filter.SetInsideValue(1)
-    threshold_filter.SetOutsideValue(0)
-    threshold_filter.Execute(blobs)
+        threshold_filter = sitk.MaximumEntropyThresholdImageFilter()
+        threshold_filter.SetInsideValue(1)
+        threshold_filter.SetOutsideValue(0)
+        threshold_filter.Execute(blobs)
 
-    threshold = threshold_filter.GetThreshold()
-    blobs = blobs > threshold
+        threshold = threshold_filter.GetThreshold()
+        blobs = blobs > threshold
 
-    label_image = sitk.ConnectedComponent(blobs)
-    stats = sitk.LabelIntensityStatisticsImageFilter()
-    stats.Execute(label_image, img)
+        label_image = sitk.ConnectedComponent(blobs)
+        stats = sitk.LabelIntensityStatisticsImageFilter()
+        stats.Execute(label_image, img)
 
-    seeds = []
-    for label in stats.GetLabels():
-        cent = np.array(stats.GetCentroid(label)).astype(int).tolist()
-        seeds.append(tuple(cent))
+        seeds = []
+        for label in stats.GetLabels():
+            cent = np.array(stats.GetCentroid(label)).astype(int).tolist()
+            seeds.append(tuple(cent))
+
+    elif img.GetDimension() == 2:
+        seeds = blob_dog(sitk.GetArrayFromImage(img), min_sigma=scale*0.75, max_sigma=scale*1.25, threshold=.20)
+        seeds = seeds[:,[1, 0]].astype(int)
+    else:
+        raise RuntimeWarning('Incorrect dimension of image during seed finding. ' 
+                             f'\nImage has a dimension {img.GetDimension()}.' 
+                             '\nTry using an input image with a (spatial) dimensionality 2 or 3')
+
+
 
     return prune_points(seeds, scale)
 
@@ -407,12 +408,30 @@ class NeuronSegmentor:
             Image: A mask that (over-) covers the somata in the input image.
 
         """
-        mask = sitk.ConfidenceConnected(self.img, seedList=self.soma_seeds.tolist(),
-                                        numberOfIterations=1,
-                                        multiplier=1,
-                                        initialNeighborhoodRadius=1,
-                                        replaceValue=1)
-        return mask
+        # mask = sitk.ConfidenceConnected(self.img, seedList=self.soma_seeds.tolist(),
+        #                                 numberOfIterations=1,
+        #                                 multiplier=1,
+        #                                 initialNeighborhoodRadius=1,
+        #                                 replaceValue=1)
+
+        size = self.img.GetSize()
+        marker = sitk.Image(*size, sitk.sitkUInt8)
+
+
+
+
+        for point in self.soma_seeds.tolist():
+            idx = marker.TransformPhysicalPointToIndex(point)
+            marker[idx] = 1
+
+        recon_filter = sitk.BinaryReconstructionByDilationImageFilter()
+        mask = recon_filter.Execute(marker, self.binary)
+
+        dil_filter = sitk.BinaryDilateImageFilter()
+        dil_filter.SetKernelRadius(self.soma_scale*2)
+        marker = dil_filter.Execute(marker)
+
+        return sitk.RescaleIntensity(sitk.Cast(marker * mask, sitk.sitkUInt16), 0, 65535)
 
     def __make_neurite_img(self, dilate: Union[int, float, bool] = True) -> Image:
         """Create a version of the original images where the somata have been removed.
@@ -491,11 +510,13 @@ class NeuronSegmentor:
         else:
             neurite_scale = self.neurite_scale
 
-        if neurite_scale > self.soma_scale / 2:
-            scales = [neurite_scale]  # For when scale and soma scale too close together.
-            # np.arange will return []
-        else:
-            scales = np.arange(neurite_scale, self.soma_scale / 2).astype(int)
+        # if neurite_scale > self.soma_scale / 2:
+        #     scales = [neurite_scale]  # For when scale and soma scale too close together.
+        #     # np.arange will return []
+        # else:
+        #     scales = np.arange(neurite_scale, self.soma_scale / 2).astype(int)
+
+        scales = np.arange(neurite_scale*0.75, neurite_scale*1.25)
 
         frangi = hessian_filter(self.img, scales, dimension=1)
 
@@ -514,33 +535,41 @@ class NeuronSegmentor:
             Image: A 16-bit modification to the frangi-filtered image with high-intensity somata.
         """
 
-        mask = self.__soma_cover
+        # mask = self.__soma_cover
+        #
+        # mask = sitk.Cast(mask, sitk.sitkUInt16)
+        #
+        # label_image = sitk.ConnectedComponent(mask)
+        # stats = sitk.LabelIntensityStatisticsImageFilter()
+        # stats.Execute(label_image, self.__neurite_frangi)
+        #
+        # soma_patch = sitk.Image(self.img.GetSize(), sitk.sitkUInt16)
+        #
+        # for label in stats.GetLabels():
+        #     mean_I = stats.GetMean(label)
+        #     max_I = stats.GetMaximum(label)
+        #
+        #     region = label_image == label
+        #
+        #     dilate_filter = sitk.BinaryDilateImageFilter()
+        #     dilate_filter.SetKernelRadius(self.neurite_scale)
+        #     dilate_filter.SetForegroundValue(1)
+        #
+        #     region = dilate_filter.Execute(region)
+        #
+        #     soma_patch += sitk.Cast(region, sitk.sitkUInt16) * mean_I
+        #
+        # inverted_mask = sitk.Cast(mask == 0, sitk.sitkUInt16)
+        #
+        # return self.__neurite_frangi * inverted_mask + soma_patch
 
-        mask = sitk.Cast(mask, sitk.sitkUInt16)
+        # result = self.__neurite_frangi
+        # clos_filter = sitk.GrayscaleMorphologicalClosingImageFilter()
+        # clos_filter.SetKernelRadius(1)
+        # for ii in range(self.soma_scale):
+        #     result = clos_filter.Execute(self.__neurite_frangi)
 
-        label_image = sitk.ConnectedComponent(mask)
-        stats = sitk.LabelIntensityStatisticsImageFilter()
-        stats.Execute(label_image, self.__neurite_frangi)
-
-        soma_patch = sitk.Image(self.img.GetSize(), sitk.sitkUInt16)
-
-        for label in stats.GetLabels():
-            mean_I = stats.GetMean(label)
-            max_I = stats.GetMaximum(label)
-
-            region = label_image == label
-
-            dilate_filter = sitk.BinaryDilateImageFilter()
-            dilate_filter.SetKernelRadius(self.neurite_scale)
-            dilate_filter.SetForegroundValue(1)
-
-            region = dilate_filter.Execute(region)
-
-            soma_patch += sitk.Cast(region, sitk.sitkUInt16) * mean_I
-
-        inverted_mask = sitk.Cast(mask == 0, sitk.sitkUInt16)
-
-        return self.__neurite_frangi * inverted_mask + soma_patch
+        return max_between_stacks(self.__neurite_frangi, self.__soma_cover)
 
     def __find_regions(self) -> tuple:
         """Find single-neuron regions in the pre-processed composite image.
@@ -572,35 +601,57 @@ class NeuronSegmentor:
 
         mask = self.__composite_image > threshold
 
+        bin_close = sitk.BinaryMorphologicalClosingImageFilter()
+        bin_close.SetKernelRadius(self.neurite_scale)
+        mask = bin_close.Execute(mask)
 
-        dilate_filter = sitk.BinaryDilateImageFilter()
-        dilate_filter.SetKernelRadius(self.soma_scale)
-        dilate_filter.SetForegroundValue(1)
-        mask = dilate_filter.Execute(mask)
+        ##########################
+        size = self.img.GetSize()
+        marker = sitk.Image(*size, sitk.sitkUInt16)
 
-        neighborhood_filter = sitk.NeighborhoodConnectedImageFilter()
-        for seed in self.soma_seeds.tolist():
-            neighborhood_filter.AddSeed(seed)
-        neighborhood_filter.SetUpper(1)
-        neighborhood_filter.SetLower(1)
-        mask = neighborhood_filter.Execute(mask)
+        for point in self.soma_seeds.tolist():
+            idx = marker.TransformPhysicalPointToIndex(point)
+            marker[idx] = 1
 
-        self.components = sitk.ConnectedComponent(mask)
+        marker = sitk.ConnectedComponent(marker)
 
-        if self.strict:
-            stats = sitk.LabelIntensityStatisticsImageFilter()
-            stats.Execute(self.components, self.img)
+        d = sitk.SignedMaurerDistanceMap(mask, insideIsPositive=False, squaredDistance=False, useImageSpacing=False)
 
-            return self.components, stats.GetLabels()
-        else:
-            dist_filter = sitk.SignedDanielssonDistanceMapImageFilter()
-            dist_filter.Execute(self.components)
-            voronoi = dist_filter.GetVoronoiMap()
+        ws = sitk.MorphologicalWatershedFromMarkers(d, marker)
 
-            stats = sitk.LabelIntensityStatisticsImageFilter()
-            stats.Execute(voronoi, self.img)
+        stats = sitk.LabelIntensityStatisticsImageFilter()
+        stats.Execute(ws, self.img)
 
-            return voronoi, stats.GetLabels()
+        # dilate_filter = sitk.BinaryDilateImageFilter()
+        # dilate_filter.SetKernelRadius(self.soma_scale)
+        # dilate_filter.SetForegroundValue(1)
+        # mask = dilate_filter.Execute(mask)
+        #
+        # neighborhood_filter = sitk.NeighborhoodConnectedImageFilter()
+        # for seed in self.soma_seeds.tolist():
+        #     neighborhood_filter.AddSeed(seed)
+        # neighborhood_filter.SetUpper(1)
+        # neighborhood_filter.SetLower(1)
+        # mask = neighborhood_filter.Execute(mask)
+
+        self.components = ws
+
+        return ws, stats.GetLabels()
+
+        # if self.strict:
+        #     stats = sitk.LabelIntensityStatisticsImageFilter()
+        #     stats.Execute(self.components, self.img)
+        #
+        #     return self.components, stats.GetLabels()
+        # else:
+        #     dist_filter = sitk.SignedDanielssonDistanceMapImageFilter()
+        #     dist_filter.Execute(self.components)
+        #     voronoi = dist_filter.GetVoronoiMap()
+        #
+        #     stats = sitk.LabelIntensityStatisticsImageFilter()
+        #     stats.Execute(voronoi, self.img)
+        #
+        #     return voronoi, stats.GetLabels()
 
     def __make_neuron_images(self) -> list:
         """Create images containing single neurons using the labeled region image.
@@ -673,27 +724,32 @@ class NeuronSegmentor:
 
 
 
-    def plot_full_segmentation(self):
+    def plot_full_segmentation(self, colorbar=False):
         """Plot the entire segmentation process.
 
           Useful for debugging.
           """
         import matplotlib.pyplot as plt
+        import matplotlib
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import ListedColormap
 
         plt.style.use('dark_background')
 
-        fig = plt.figure(figsize=(20, 7), dpi=200)
+        fig = plt.figure(figsize=(15, 7), dpi=400)
 
         ax = fig.add_subplot(2, 4, 1)
-        plt.title(f'Original image, soma size {self.soma_scale} px')
+        plt.title(f'Original image, soma size: {self.soma_scale} px')
         plt.imshow(flatten(self.img), cmap='gray', interpolation='none')
-        plt.colorbar()
+        if colorbar:
+            plt.colorbar()
         plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 2)
         plt.title('Initial binary pass')
         plt.imshow(flatten(self.binary), cmap='gray', interpolation='none')
-        plt.colorbar()
+        if colorbar:
+            plt.colorbar()
         plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 3)
@@ -704,38 +760,62 @@ class NeuronSegmentor:
         x = soma_seeds[:, 0]
         y = shape[0] - soma_seeds[:, 1]
         plt.plot(x, y, color='red', marker='x', markersize=20, linestyle='none')
-        plt.colorbar()
+        if colorbar:
+            plt.colorbar()
         plt.axis('square')
         plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 4)
         plt.title('Soma mask')
         plt.imshow(flatten(self.__soma_cover), cmap='gray', interpolation='none')
-        plt.colorbar()
+        if colorbar:
+            plt.colorbar()
         plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 5)
-        plt.title(f'Frangi. Neurite size ={self.neurite_scale} px')
+        plt.title(f'Frangi. Neurite size: {self.neurite_scale} px')
         plt.imshow(flatten(self.__neurite_frangi), cmap='gray', interpolation='none')
-        plt.colorbar()
+        if colorbar:
+            plt.colorbar()
         plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 6)
         plt.title('Composite image')
         plt.imshow(flatten(self.__composite_image), cmap='gray', interpolation='none')
+        if colorbar:
+            plt.colorbar()
         plt.axis('off')
-        plt.colorbar()
 
         ax = fig.add_subplot(2, 4, 7)
-        plt.title(f'Final components')
+        plt.title(f'Final regions')
         plt.imshow(flatten(self.components), cmap='nipy_spectral', interpolation='none')
-        plt.colorbar()
+        if colorbar:
+            plt.colorbar()
         plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 8)
-        plt.title('Regions')
-        plt.imshow(flatten(self.regions), cmap='nipy_spectral', interpolation='none')
-        plt.colorbar()
+        cmaps = ['hot', 'bone', 'copper', 'pink']
+        num_cmaps = len(cmaps)
+
+        shape = self.regions.GetSize()
+        plt.title(f'{len(self.__region_labels)} Labeled neurons')
+
+        neuron_images = [neuron.img for neuron in self.neurons]
+
+        for ii, image in enumerate(neuron_images[::-1]):
+            cmap = matplotlib.cm.get_cmap(cmaps[ii % num_cmaps])
+
+            # Create color map with step in alpha channel
+            # Convert threshold to value between 0-1
+            step = round(self.threshold / sitk.GetArrayFromImage(self.img).max(), 3)
+            aa_cmap = cmap(np.arange(cmap.N))
+            aa_cmap[:, -1] = np.linspace(0, 1, cmap.N) > step
+            aa_cmap = ListedColormap(aa_cmap)
+
+            plt.imshow(flatten(image),
+                       cmap=aa_cmap,
+                       extent=[0, shape[0], 0, shape[1]],
+                       alpha=1)
         plt.axis('off')
 
         plt.tight_layout()
