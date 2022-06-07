@@ -214,7 +214,8 @@ class SWC(object):
         # Reset ParentID of point 0 to -1 (Root), as this might be changed by the mask
         self._data[0, 6] = -1
 
-
+    def apply_scale(self, factor):
+        self._data[:, [2, 3, 4, 5]] = self._data[:, [2, 3, 4, 5]] * factor # Scale X, Y, Z and R dimensions by a factor
 
     def _prune_leaves(self):
         # Find all the leaves

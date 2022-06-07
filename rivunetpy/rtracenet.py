@@ -1,13 +1,18 @@
 import os
+import sys
 from multiprocessing import Pool
 
 import time
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+from matplotlib.colors import ListedColormap
 import SimpleITK as sitk
 
 from rivunetpy.trace import R2Tracer
 from rivunetpy.swc import SWC
-from rivunetpy.utils.io import loadswc
-from rivunetpy.utils.io import loadimg, crop
+from rivunetpy.utils.plottools import flatten
+from rivunetpy.utils.io import loadswc, loadimg, crop
 from rivunetpy.utils.filtering import apply_threshold
 from rivunetpy.trace import estimate_radius
 from rivunetpy.utils.segmentation import NeuronSegmentor
@@ -18,7 +23,7 @@ from rivunetpy.utils.extensions import RIVULET_2_TREE_SWC_EXT, RIVULET_2_TREE_IM
 def check_long_ext(file_to_check, ext):
     return file_to_check.split(os.extsep, 1)[-1] == ext.split(os.extsep, 1)[-1]
 
-def trace_single(neuron, threshold, speed, quality, force_retrace):
+def trace_single(neuron, threshold, speed, quality, force_retrace, scale):
     starttime = time.time()
     img = neuron.img
     neuron.swc_fname = '{}{}'.format(neuron.img_fname.split(RIVULET_2_TREE_IMG_EXT)[0], RIVULET_2_TREE_SWC_EXT)
@@ -37,7 +42,9 @@ def trace_single(neuron, threshold, speed, quality, force_retrace):
         else:
             _, reg_thresh = apply_threshold(img, mthd='Max Entropy')
 
-        img = sitk.GetArrayFromImage(img)
+        img: np.ndarray = sitk.GetArrayFromImage(img)
+        img = np.moveaxis(img, 0, -1)
+        img = np.swapaxes(img, 0, 1)
 
         img, crop_region = crop(img, reg_thresh)  # Crop by default
         print(f'Neuron ({neuron.num})\t --Tracing neuron of shape {img.shape} '
@@ -67,6 +74,8 @@ def trace_single(neuron, threshold, speed, quality, force_retrace):
 
         swc.apply_soma_TypeID(soma)
 
+        swc.apply_scale(scale)
+
         swc.reset(crop_region, 1)
 
         swc.save(neuron.swc_fname)
@@ -74,7 +83,40 @@ def trace_single(neuron, threshold, speed, quality, force_retrace):
 
     return neuron
 
-def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True, force_recalculate=False,
+def plot(results):
+    fig, ax = plt.subplots(1, 2)
+
+    cmaps = ['hot', 'bone', 'copper', 'pink']
+    num_cmaps = len(cmaps)
+
+    neuron_fnames = [neuron.img_fname for neuron in results]
+
+    for ii, fname in enumerate(neuron_fnames):
+        img = sitk.ReadImage(fname)
+        cmap = matplotlib.cm.get_cmap(cmaps[ii % num_cmaps])
+
+        shape = img.GetSize()
+
+        # Create color map with step in alpha channel
+        # Convert threshold to value between 0-1
+        step =
+        aa_cmap = cmap(np.arange(cmap.N))
+        aa_cmap[:, -1] = np.linspace(0, 1, cmap.N) > step
+        aa_cmap = ListedColormap(aa_cmap)
+
+        ax[0].imshow(flatten(img),
+                   cmap=aa_cmap,
+                   extent=[0, shape[0], 0, shape[1]],
+                   alpha=1)
+
+    for neuron in results:
+        swc = neuron.swc
+        swc.as_image(ax=ax[1])
+
+
+    fig.show()
+
+def trace_net(file=None, dir_out=None, threshold=None, force_recalculate=False,
               speed=False, quality=False, asynchronous=True, voxel_size=()):
 
     if threshold is not None and type(threshold) not in (int, float, str):
@@ -82,16 +124,47 @@ def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True, force_re
                         f'or a number, specifying the threshold value, instead got {type(threshold)}')
 
     img_dir, img_name = os.path.split(file)
-    img = loadimg(file, 1)
 
     if dir_out is None:
         dir_out = os.path.splitext(img_name)[0]
 
     save_dir = os.path.join(img_dir, dir_out)
 
+    file_reader = sitk.ImageFileReader()
+    file_reader.SetFileName(file)
+    file_reader.ReadImageInformation()
+
+    img_info = [pair.split('=') for pair in file_reader.GetMetaData('ImageDescription').split('\n')]
+    img_info.remove([''])
+    img_info = dict(img_info)
+
+    voxelsize = img_info.get('spacing')
+    period = img_info.get('finterval')
+    period_unit = img_info.get('tunit')
+
+    z_depth = img_info.get('slices')
+    frames = img_info.get('frames')
+
+    if voxelsize is not None:
+        voxelsize = float(voxelsize)
+
+    if period is not None:
+        if period_unit is not None:
+            if period_unit == 'ms':
+                period = float(period)
+            if period_unit in ['seconds', 'sec', 's']:
+                period = float(period) / 1000
+
+    if z_depth is not None:
+        z_depth = int(z_depth)
+
+    if frames is not None:
+        frames = int(frames)
+
     if (os.path.exists(save_dir)
             and not force_recalculate
             and any([check_long_ext(fname, RIVULET_2_TREE_IMG_EXT) for fname in os.listdir(save_dir)])):
+
         neurons = []
         for fname in os.listdir(save_dir):
             if check_long_ext(fname, RIVULET_2_TREE_IMG_EXT):
@@ -100,11 +173,32 @@ def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True, force_re
                 neurons.append(Neuron(image, img_fname=loc, num=len(neurons)))
         print(f'Loaded {len(neurons)} neurons from file.')
     else:
+        ################ LOAD IMAGE AND METADATA #################
+        img = loadimg(file, 1)
+        X_size, Y_size, stacks = img.GetSize()
+
+        ######## CREATE PROJECTIONS FOR TRACING AND VOLTAGE IMAGE DATA ANALYSIS ##########
+
+        # Project to 3D image to get geometry
+        T_project = np.reshape(sitk.GetArrayFromImage(img), (frames, z_depth, X_size, Y_size))
+        T_project = np.amax(T_project, axis=0)
+
+
+        del(img) # Get huge image out of memory ASAP
+
+        # Project to 2D image to attain (relative) votlage data when XY coords of somata are known
+        ZT_project = np.amax(T_project, axis=0)
+
+        T_project = sitk.GetImageFromArray(T_project)
+        ZT_project = sitk.GetImageFromArray(ZT_project)
+
         # Create a new directory next to the input file for the SWC outputs
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
-        neuronsegmentor = NeuronSegmentor(img, strict=strict_seg)
+        neuronsegmentor = NeuronSegmentor(T_project)
+        neuronsegmentor.plot()
+        neuronsegmentor.plot_full_segmentation()
         neurons = neuronsegmentor.neurons
 
         for ii, neuron in enumerate(neurons):
@@ -116,18 +210,21 @@ def trace_net(file=None, dir_out=None, threshold=None, strict_seg=True, force_re
         print(f'Segmented image into {len(neurons)} neurons.')
 
     result_buffers = []
-    with Pool(processes=os.cpu_count() - 1) as pool:
-
-        if asynchronous:
+    if asynchronous:
+        with Pool(processes=os.cpu_count() - 1) as pool:
             for neuron in neurons:
-                result_buffer = pool.apply_async(trace_single, (neuron, threshold, speed, quality, force_recalculate))
+                result_buffer = pool.apply_async(trace_single,
+                                                 (neuron, threshold, speed, quality, force_recalculate, voxelsize))
                 result_buffers.append(result_buffer)
 
             results = [result_buffer.get() for result_buffer in result_buffers]
-        else:
-            for neuron in neurons:
-                result_buffers.append(trace_single(neuron, threshold, speed, quality, force_recalculate))
+    else:
+        for neuron in neurons:
+            result_buffers.append(trace_single(neuron, threshold, speed, quality, force_recalculate, voxelsize))
 
-            results = result_buffers
+        results = result_buffers
+
+    plot(results)
 
     return results
+

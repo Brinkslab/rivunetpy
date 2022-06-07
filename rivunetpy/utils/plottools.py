@@ -7,7 +7,7 @@ from rivunetpy.swc import SWC
 from rivunetpy.utils.volume_rendering_vtk import (volumeRender, vtk_create_renderer, set_camera,
                                                   vtk_show, vtk_basic, get_tf)
 
-def flatten(image, whitebackground=False):
+def flatten(image, as_sitk=False, whitebackground=False):
 
     if type(image) is sitk.Image:
         image = sitk.GetArrayFromImage(image)
@@ -23,7 +23,11 @@ def flatten(image, whitebackground=False):
     else:
         raise TypeError('Expected an image with either 2 or 3 dimensions (Z Stack) '
                         f'but got an image of {image.ndim} dimensions of shape {image.shape}')
-    return flat_image
+
+    if as_sitk:
+        return sitk.GetImageFromArray(flat_image)
+    else:
+        return flat_image
 
 def get_actors_from_args(args, labeled=False):
     actor_list = []

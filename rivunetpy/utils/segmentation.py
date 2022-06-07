@@ -15,6 +15,10 @@ import copy
 from typing import Union
 from multiprocessing import Process, Manager
 
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+
 import numpy as np
 from tqdm import tqdm
 import SimpleITK as sitk
@@ -97,8 +101,6 @@ def eval_hessian_scale(img: Image, img_list: list, scale: Union[int, float],
     frangi_filter.SetScaleObjectnessMeasure(scaled_to_eval)
     frangi_filter.SetObjectDimension(dimension)
 
-
-
     gaussian_filter = sitk.DiscreteGaussianImageFilter()
     gaussian_filter.SetMaximumKernelWidth(1000)
     gaussian_filter.SetUseImageSpacing(False)
@@ -108,9 +110,7 @@ def eval_hessian_scale(img: Image, img_list: list, scale: Union[int, float],
     img_blurred = sitk.RescaleIntensity(img_blurred, 0, 65535)
     img_blurred = sitk.Cast(img_blurred, sitk.sitkFloat32)
 
-
     result = frangi_filter.Execute(img_blurred)
-
 
     x = result.GetDimension()
 
@@ -186,6 +186,7 @@ def find_max_scale(binary: Image) -> int:
     Returns:
         Integer representing a radius-like measure for the size of the largest object in an image (pixel units).
     """
+
     distance_transform = sitk.SignedMaurerDistanceMapImageFilter()
     # distance_transform.SetUseImageSpacing(False)
     distance_transform.SetInsideIsPositive(True)
@@ -235,7 +236,7 @@ def prune_points(points: list, radius: Union[int, float]) -> np.ndarray:
     return valid_points
 
 
-def get_seeds(img: Image, scale: int) -> np.ndarray:
+def get_seeds(img: Image, scale: int, threshold: float = 0.20) -> np.ndarray:
     """Gives the coordinates of blobs of a certain scale in a 3D stack.
 
     Retrieves the points at which blobs of a specified scale lie in a 3D stack image. Each blob is assigned strictly
@@ -245,6 +246,7 @@ def get_seeds(img: Image, scale: int) -> np.ndarray:
     Args:
         img: Input image from which to extract seeds.
         scale: Scale of blobs which are assigned seed points.
+        threshold: Tolerance for differently-sized somata
 
     Returns:
         np.ndarray: A ``numpy`` array of points, each lying on one blob in a location that is a-specific to
@@ -252,7 +254,10 @@ def get_seeds(img: Image, scale: int) -> np.ndarray:
     """
 
     if img.GetDimension() == 3:
-        blobs = hessian_filter(img, [scale], scaled_to_eval=False, dimension=0)
+
+        scales = np.arange(int(scale * (1 - threshold)), int(scale * (1 + threshold)))
+
+        blobs = hessian_filter(img, scales, scaled_to_eval=False, dimension=0)
 
         blobs = sitk.RescaleIntensity(blobs, 0, 65535)  # 0-65535
 
@@ -282,14 +287,13 @@ def get_seeds(img: Image, scale: int) -> np.ndarray:
             seeds.append(tuple(cent))
 
     elif img.GetDimension() == 2:
-        seeds = blob_dog(sitk.GetArrayFromImage(img), min_sigma=scale*0.75, max_sigma=scale*1.25, threshold=.20)
-        seeds = seeds[:,[1, 0]].astype(int)
+        seeds = blob_dog(sitk.GetArrayFromImage(img), min_sigma=scale * 0.75, max_sigma=scale * 1.25, threshold=.20)
+        seeds = seeds[:, [1, 0]].astype(int)
+
     else:
-        raise RuntimeWarning('Incorrect dimension of image during seed finding. ' 
-                             f'\nImage has a dimension {img.GetDimension()}.' 
+        raise RuntimeWarning('Incorrect dimension of image during seed finding. '
+                             f'\nImage has a dimension {img.GetDimension()}.'
                              '\nTry using an input image with a (spatial) dimensionality 2 or 3')
-
-
 
     return prune_points(seeds, scale)
 
@@ -309,7 +313,7 @@ class NeuronSegmentor:
         neurons: Images of the individual neurons.
     """
 
-    def __init__(self, img: Image, threshold: Union[int, float] = None, strict=True):
+    def __init__(self, img: Image, threshold: Union[int, float] = None, tolerance=0.2):
         """Segment an image of multiple neurons.
 
         A progress bar is shown to indicate the approximate progress.
@@ -325,7 +329,9 @@ class NeuronSegmentor:
         print('Starting segmentation')
         self.img = img
         self.PixelID = self.img.GetPixelID()
-        self.strict = strict
+
+        self.seed_tolerance = tolerance
+
         if threshold is None:
             threshold_filter = sitk.MaximumEntropyThresholdImageFilter()
             threshold_filter.SetInsideValue(1)
@@ -379,10 +385,35 @@ class NeuronSegmentor:
 
         Only works if the original image was correctly binarized.
 
+        Designed to also work with "hollow" somata images due to membrane expression of GEVIs.
+        First flattens image to a 2D projection to estiamte scale. This assumes that the cells are in culture
+        and thus have soma that are larger in XY than Z. A second pass is then done in 3D using a binary image
+        on which morphological closing is performed. The estimated scale is used for the closing kernel size.
+
         Returns:
             int: An integer that is approximately equal to the radius of the soma in pixel units.
         """
-        return find_max_scale(self.binary)
+        flat_bin = flatten(self.binary, as_sitk=True)
+
+        distance_transform = sitk.SignedMaurerDistanceMapImageFilter()
+        # distance_transform.SetUseImageSpacing(False)
+        distance_transform.SetInsideIsPositive(True)
+        # distance_transform.SetBackgroundValue(1)
+        distance_transform.SetSquaredDistance(False)
+        distance_img = distance_transform.Execute(flat_bin)
+
+        max_filter = sitk.MinimumMaximumImageFilter()
+        _ = max_filter.Execute(distance_img)
+
+        scale_guess_2D = int(max_filter.GetMaximum())
+
+        clos_filt = sitk.BinaryMorphologicalClosingImageFilter()
+
+        clos_filt.SetKernelRadius(int(scale_guess_2D))
+
+        scale_guess_3D = find_max_scale(clos_filt.Execute(self.binary))
+
+        return max(scale_guess_3D, scale_guess_2D)
 
     def __find_soma_seeds(self) -> np.ndarray:
         """Finds unique points on the soma that can act as seeds for segmentation.
@@ -394,7 +425,7 @@ class NeuronSegmentor:
         Returns:
             np.ndarray: A ``numpy`` array containing the locations of the somata in pixel units.
         """
-        return get_seeds(self.img, self.soma_scale)
+        return get_seeds(self.img, self.soma_scale, threshold=self.seed_tolerance)
 
     def __make_soma_overfit_cover(self) -> Image:
         """Create a mask that is guaranteed to cover the somata in an image.
@@ -417,9 +448,6 @@ class NeuronSegmentor:
         size = self.img.GetSize()
         marker = sitk.Image(*size, sitk.sitkUInt8)
 
-
-
-
         for point in self.soma_seeds.tolist():
             idx = marker.TransformPhysicalPointToIndex(point)
             marker[idx] = 1
@@ -428,7 +456,7 @@ class NeuronSegmentor:
         mask = recon_filter.Execute(marker, self.binary)
 
         dil_filter = sitk.BinaryDilateImageFilter()
-        dil_filter.SetKernelRadius(self.soma_scale*2)
+        dil_filter.SetKernelRadius(self.soma_scale * 2)
         marker = dil_filter.Execute(marker)
 
         return sitk.RescaleIntensity(sitk.Cast(marker * mask, sitk.sitkUInt16), 0, 65535)
@@ -516,7 +544,7 @@ class NeuronSegmentor:
         # else:
         #     scales = np.arange(neurite_scale, self.soma_scale / 2).astype(int)
 
-        scales = np.arange(neurite_scale*0.75, neurite_scale*1.25)
+        scales = np.arange(neurite_scale * 0.75, neurite_scale * 1.25)
 
         frangi = hessian_filter(self.img, scales, dimension=1)
 
@@ -667,26 +695,9 @@ class NeuronSegmentor:
 
         return neurons
 
-    def plot(self):
-        """Simple plotting.
-
-        Shows the original image, annotated using the somata locations used as seeds for plotting, along with an image
-        with the individually labeled neurons.
-        """
-        import matplotlib
-        import matplotlib.pyplot as plt
-        from matplotlib.colors import ListedColormap
-
-        plt.style.use('dark_background')
-
-        cmaps = ['hot', 'bone', 'copper', 'pink']
-        num_cmaps = len(cmaps)
-
-        fig = plt.figure(figsize=(10, 5), dpi=200)
-
-        ax = fig.add_subplot(1, 2, 1)
+    def __plot_seeds(self):
         shape = self.img.GetSize()
-        plt.title(f'{len(self.soma_seeds)} Unique seeds')
+
         soma_seeds = np.array(self.soma_seeds)
         plt.imshow(flatten(self.img),
                    cmap='gray',
@@ -694,17 +705,17 @@ class NeuronSegmentor:
         x = soma_seeds[:, 0]
         y = shape[0] - soma_seeds[:, 1]
         plt.plot(x, y, marker='x', markersize=20, linestyle='none')
-        plt.axis('square')
-        plt.axis('off')
 
-        ax = fig.add_subplot(1, 2, 2)
+    def __plot_neuron_images(self):
+        cmaps = ['hot', 'bone', 'copper', 'pink']
+        num_cmaps = len(cmaps)
+
         shape = self.regions.GetSize()
-        plt.title(f'{len(self.__region_labels)} Labeled neurons')
 
         neuron_images = [neuron.img for neuron in self.neurons]
 
         for ii, image in enumerate(neuron_images[::-1]):
-            cmap = matplotlib.cm.get_cmap(cmaps[ii%num_cmaps])
+            cmap = matplotlib.cm.get_cmap(cmaps[ii % num_cmaps])
 
             # Create color map with step in alpha channel
             # Convert threshold to value between 0-1
@@ -717,12 +728,34 @@ class NeuronSegmentor:
                        cmap=aa_cmap,
                        extent=[0, shape[0], 0, shape[1]],
                        alpha=1)
+
+    def plot(self):
+        """Simple plotting.
+
+        Shows the original image, annotated using the somata locations used as seeds for plotting, along with an image
+        with the individually labeled neurons.
+        """
+
+
+        plt.style.use('dark_background')
+
+
+
+        fig = plt.figure(figsize=(10, 5), dpi=200)
+
+        ax = fig.add_subplot(1, 2, 1)
+        self.__plot_seeds()
+        plt.title(f'{len(self.soma_seeds)} Unique seeds')
+        plt.axis('square')
+        plt.axis('off')
+
+        ax = fig.add_subplot(1, 2, 2)
+        self.__plot_neuron_images()
+        plt.title(f'{len(self.__region_labels)} Labeled neurons')
         plt.axis('off')
 
         plt.tight_layout()
         plt.show()
-
-
 
     def plot_full_segmentation(self, colorbar=False):
         """Plot the entire segmentation process.
@@ -753,13 +786,8 @@ class NeuronSegmentor:
         plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 3)
-        shape = self.img.GetSize()
+        self.__plot_seeds()
         plt.title(f'{len(self.soma_seeds)} Unique seeds')
-        soma_seeds = np.array(self.soma_seeds)
-        plt.imshow(flatten(self.img), cmap='gray', interpolation='none', extent=[0, shape[0], 0, shape[1]])
-        x = soma_seeds[:, 0]
-        y = shape[0] - soma_seeds[:, 1]
-        plt.plot(x, y, color='red', marker='x', markersize=20, linestyle='none')
         if colorbar:
             plt.colorbar()
         plt.axis('square')
@@ -794,28 +822,8 @@ class NeuronSegmentor:
         plt.axis('off')
 
         ax = fig.add_subplot(2, 4, 8)
-        cmaps = ['hot', 'bone', 'copper', 'pink']
-        num_cmaps = len(cmaps)
-
-        shape = self.regions.GetSize()
+        self.__plot_neuron_images()
         plt.title(f'{len(self.__region_labels)} Labeled neurons')
-
-        neuron_images = [neuron.img for neuron in self.neurons]
-
-        for ii, image in enumerate(neuron_images[::-1]):
-            cmap = matplotlib.cm.get_cmap(cmaps[ii % num_cmaps])
-
-            # Create color map with step in alpha channel
-            # Convert threshold to value between 0-1
-            step = round(self.threshold / sitk.GetArrayFromImage(self.img).max(), 3)
-            aa_cmap = cmap(np.arange(cmap.N))
-            aa_cmap[:, -1] = np.linspace(0, 1, cmap.N) > step
-            aa_cmap = ListedColormap(aa_cmap)
-
-            plt.imshow(flatten(image),
-                       cmap=aa_cmap,
-                       extent=[0, shape[0], 0, shape[1]],
-                       alpha=1)
         plt.axis('off')
 
         plt.tight_layout()

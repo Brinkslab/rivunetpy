@@ -70,6 +70,7 @@ class R2Tracer(Tracer):
                 'non stop' if self._non_stop else 'standard stopping criteria'))
         swc = self._iterative_backtrack()
 
+
         if self._clean:
             swc.prune()
 
@@ -305,6 +306,9 @@ class R2Tracer(Tracer):
                     pidx = branch.touch_idx
                 swc.add_branch(branch, pidx)
         return swc
+
+
+
 
 
 class Branch(object):
