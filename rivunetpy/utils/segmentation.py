@@ -236,7 +236,7 @@ def prune_points(points: list, radius: Union[int, float]) -> np.ndarray:
     return valid_points
 
 
-def get_seeds(img: Image, scale: int, threshold: float = 0.20) -> np.ndarray:
+def get_seeds(img: Image, scale: int, threshold: float = 0.20, exclude_border_dist: int = None) -> np.ndarray:
     """Gives the coordinates of blobs of a certain scale in a 3D stack.
 
     Retrieves the points at which blobs of a specified scale lie in a 3D stack image. Each blob is assigned strictly
@@ -260,6 +260,14 @@ def get_seeds(img: Image, scale: int, threshold: float = 0.20) -> np.ndarray:
         blobs = hessian_filter(img, scales, scaled_to_eval=False, dimension=0)
 
         blobs = sitk.RescaleIntensity(blobs, 0, 65535)  # 0-65535
+
+        if exclude_border_dist is not None:
+            rad = exclude_border_dist
+            # Only take off XY border, Z slice too thin
+            blobs[:rad, :, :] = 0
+            blobs[-rad:, :, :] = 0
+            blobs[:, :rad, :] = 0
+            blobs[:, -rad:, :] = 0
 
         blobs = sitk.Cast(blobs, sitk.sitkUInt16)
 
@@ -345,6 +353,7 @@ class NeuronSegmentor:
             raise ValueError(f'Threshold value should be of type int or float, instead got {type(threshold)}')
 
         self.binary = self.img > self.threshold
+        self.binary_closed = None
 
         self.components = None
 
@@ -411,7 +420,9 @@ class NeuronSegmentor:
 
         clos_filt.SetKernelRadius(int(scale_guess_2D))
 
-        scale_guess_3D = find_max_scale(clos_filt.Execute(self.binary))
+        self.binary_closed = clos_filt.Execute(self.binary)
+
+        scale_guess_3D = find_max_scale(self.binary_closed)
 
         return max(scale_guess_3D, scale_guess_2D)
 
@@ -425,7 +436,7 @@ class NeuronSegmentor:
         Returns:
             np.ndarray: A ``numpy`` array containing the locations of the somata in pixel units.
         """
-        return get_seeds(self.img, self.soma_scale, threshold=self.seed_tolerance)
+        return get_seeds(self.img, self.soma_scale, threshold=self.seed_tolerance, exclude_border_dist=self.soma_scale)
 
     def __make_soma_overfit_cover(self) -> Image:
         """Create a mask that is guaranteed to cover the somata in an image.
@@ -453,7 +464,7 @@ class NeuronSegmentor:
             marker[idx] = 1
 
         recon_filter = sitk.BinaryReconstructionByDilationImageFilter()
-        mask = recon_filter.Execute(marker, self.binary)
+        mask = recon_filter.Execute(marker, self.binary_closed)
 
         dil_filter = sitk.BinaryDilateImageFilter()
         dil_filter.SetKernelRadius(self.soma_scale * 2)
@@ -704,7 +715,7 @@ class NeuronSegmentor:
                    extent=[0, shape[0], 0, shape[1]])
         x = soma_seeds[:, 0]
         y = shape[0] - soma_seeds[:, 1]
-        plt.plot(x, y, marker='x', markersize=20, linestyle='none')
+        plt.plot(x, y, color='royalblue', marker='x', markersize=20, linestyle='none')
 
     def __plot_neuron_images(self):
         cmaps = ['hot', 'bone', 'copper', 'pink']

@@ -16,7 +16,7 @@ FORCE = True
 
 if __name__ == '__main__':
 
-    filename = 'data/T_proj.tif'
+    filename = 'data/Projected.tif'
     # filename = 'data/synthetic-3-cells.tif'
 
     img = loadtiff3d(filename, out='SITK') # Original Image

@@ -97,9 +97,14 @@ def plot(results):
 
         shape = img.GetSize()
 
+        if img.GetPixelID() == sitk.sitkUInt16:
+            max_px = 2**16-1
+        else:
+            max_px = 2**8-1
+
         # Create color map with step in alpha channel
         # Convert threshold to value between 0-1
-        step =
+        step = 1/max_px
         aa_cmap = cmap(np.arange(cmap.N))
         aa_cmap[:, -1] = np.linspace(0, 1, cmap.N) > step
         aa_cmap = ListedColormap(aa_cmap)
@@ -171,7 +176,7 @@ def trace_net(file=None, dir_out=None, threshold=None, force_recalculate=False,
                 loc = os.path.join(save_dir, fname)
                 image = loadimg(loc, 1)
                 neurons.append(Neuron(image, img_fname=loc, num=len(neurons)))
-        print(f'Loaded {len(neurons)} neurons from file.')
+        print(f'Loaded {len(neurons)} neuron images from file.')
     else:
         ################ LOAD IMAGE AND METADATA #################
         img = loadimg(file, 1)
@@ -192,14 +197,19 @@ def trace_net(file=None, dir_out=None, threshold=None, force_recalculate=False,
         T_project = sitk.GetImageFromArray(T_project)
         ZT_project = sitk.GetImageFromArray(ZT_project)
 
+        # Write image to test segmentation
+        # sitk.WriteImage(T_project, 'Projected.tif')
+
         # Create a new directory next to the input file for the SWC outputs
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
         neuronsegmentor = NeuronSegmentor(T_project)
-        neuronsegmentor.plot()
-        neuronsegmentor.plot_full_segmentation()
         neurons = neuronsegmentor.neurons
+
+        # DEBUG PLOTS
+        # neuronsegmentor.plot()
+        # neuronsegmentor.plot_full_segmentation()
 
         for ii, neuron in enumerate(neurons):
             # Store images
@@ -209,20 +219,19 @@ def trace_net(file=None, dir_out=None, threshold=None, force_recalculate=False,
             sitk.WriteImage(neuron.img, neuron.img_fname)
         print(f'Segmented image into {len(neurons)} neurons.')
 
-    result_buffers = []
     if asynchronous:
         with Pool(processes=os.cpu_count() - 1) as pool:
+            result_buffers = []
             for neuron in neurons:
-                result_buffer = pool.apply_async(trace_single,
+                result = pool.apply_async(trace_single,
                                                  (neuron, threshold, speed, quality, force_recalculate, voxelsize))
-                result_buffers.append(result_buffer)
+                result_buffers.append(result)
 
-            results = [result_buffer.get() for result_buffer in result_buffers]
+            results = [result.get() for result in result_buffers]
     else:
+        results = []
         for neuron in neurons:
-            result_buffers.append(trace_single(neuron, threshold, speed, quality, force_recalculate, voxelsize))
-
-        results = result_buffers
+            results.append(trace_single(neuron, threshold, speed, quality, force_recalculate, voxelsize))
 
     plot(results)
 
