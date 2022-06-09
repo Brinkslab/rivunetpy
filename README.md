@@ -92,11 +92,11 @@ This will download a simple neuron image and perform a neuron tracing with rivul
 - Reconstruct multiple neurons in a single image
 
 ```python
-from rivunetpy import rtracenet
+from rivunetpy import rivunetpy
 
 if __name__ == '__main__':
     filename = r'data\3-cells.tif'
-    rtracenet.trace_net(filename)
+    rivunetpy.trace_net(filename)
 
     
 ```

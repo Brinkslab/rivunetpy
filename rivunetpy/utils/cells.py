@@ -7,11 +7,15 @@ from rivunetpy.swc import SWC
 @dataclass
 class Neuron:
     img: Image
-    num: int = None
+    # soma_pos: tuple = None
     img_fname: str = None
-    # centroid: tuple = None
+
+    num: int = None
+
     swc: SWC = None
     swc_fname: str = None
+
+
 
     def add_SWC(self, swc):
         self.swc = swc

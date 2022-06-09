@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 import argparse
-from rivunetpy.rtracenet import trace_net
+from rivunetpy.rivunetpy import trace_net
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
