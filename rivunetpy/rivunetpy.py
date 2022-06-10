@@ -31,11 +31,13 @@ class VITracer():
         self.filename = None
         self.out = None
         self.threshold = None
+        self.tolerance = 0.2
         self.force_redo = False
         self.quality = False
         self.asynchronous = True
         self.neurons = None
         self._speed = False
+        self.hyperstack = True
 
     def set_file(self, filename: str):
         self.filename = filename
@@ -54,6 +56,10 @@ class VITracer():
 
     def set_threshold(self, threshold: int):
         self.threshold = threshold
+        return self
+
+    def set_tolerance(self, tolerance: int):
+        self.tolerance = tolerance
         return self
 
     def force_redo_on(self):
@@ -92,6 +98,18 @@ class VITracer():
         self.asynchronous = asynchronous
         return self
 
+    def hyperstack_on(self):
+        self.hyperstack = True
+        return self
+
+    def hyperstack_off(self):
+        self.hyperstack = False
+        return self
+
+    def set_hyperstack(self, hyperstack: bool):
+        self.hyperstack = hyperstack
+        return self
+
     def _plot(self):
         fig, ax = plt.subplots(1, 2)
 
@@ -108,39 +126,7 @@ class VITracer():
 
         fig.show()
 
-    @staticmethod
-    def get_voltage_single(neuron: Neuron, img: Image, radius):
-        soma_centroid = neuron.swc._data[0, 2:5]  # XYZ of soma in SWC
 
-        mask = sitk.Image(img.GetSize(), img.GetPixelID())
-
-        idx = mask.TransformPhysicalPointToIndex(soma_centroid)
-        mask[idx] = 1
-
-        bin_dil_filt = sitk.BinaryDilateImageFilter()
-        bin_dil_filt.SetKernelRadius(radius)
-        bin_dil_filt.SetKernelType(sitk.sitkBall)
-        mask = bin_dil_filt.Execute(mask)
-
-        plt.imshow(flatten(mask))
-        plt.show()
-
-    def get_voltage(self):
-        img = loadimg(self.filename, 1)
-
-        if self.asynchronous:
-            with Pool(processes=os.cpu_count() - 1) as pool:
-                result_buffers = []
-                for neuron in self.neurons:
-                    result = pool.apply_async(self.get_voltage_single,
-                                              (neuron, img, 20))
-                    result_buffers.append(result)
-
-                results = [result.get() for result in result_buffers]
-        else:
-            results = []
-            for neuron in self.neurons:
-                results.append(self.get_voltage_single(neuron, img, 20))
 
     def _read_metadata(self):
         file_reader = sitk.ImageFileReader()
@@ -275,7 +261,7 @@ class VITracer():
         if not os.path.exists(self.out):
             os.mkdir(self.out)
 
-        neuronsegmentor = NeuronSegmentor(T_project)
+        neuronsegmentor = NeuronSegmentor(T_project, threshold=self.threshold, tolerance=self.tolerance)
         self.neurons = neuronsegmentor.neurons
 
         # DEBUG PLOTS
@@ -378,6 +364,41 @@ class VITracer():
                                                self.voxelsize))
 
             self.neurons = result_buffers
+
+    @staticmethod
+    def _get_voltage_single(neuron: Neuron, img: Image, radius):
+        soma_centroid = neuron.swc._data[0, 2:5]  # XYZ of soma in SWC
+
+        mask = sitk.Image(img.GetSize(), img.GetPixelID())
+
+        idx = mask.TransformPhysicalPointToIndex(soma_centroid)
+        mask[idx] = 1
+
+        bin_dil_filt = sitk.BinaryDilateImageFilter()
+        bin_dil_filt.SetKernelRadius(radius)
+        bin_dil_filt.SetKernelType(sitk.sitkBall)
+        mask = bin_dil_filt.Execute(mask)
+
+        plt.imshow(flatten(mask))
+        plt.show()
+
+    def _get_voltage_all(self):
+        img = loadimg(self.filename, 1)
+
+        if self.asynchronous:
+            with Pool(processes=os.cpu_count() - 1) as pool:
+                result_buffers = []
+                for neuron in self.neurons:
+                    result = pool.apply_async(self._get_voltage_single,
+                                              (neuron, img, 20))
+                    result_buffers.append(result)
+
+                results = [result.get() for result in result_buffers]
+        else:
+            results = []
+            for neuron in self.neurons:
+                results.append(self._get_voltage_single(neuron, img, 20))
+
     def execute(self):
 
         if self.threshold is not None and not isinstance(self.threshold, (int, float, str)):
