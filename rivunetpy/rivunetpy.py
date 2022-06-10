@@ -35,125 +35,78 @@ class VITracer():
         self.quality = False
         self.asynchronous = True
         self.neurons = None
+        self._speed = False
 
-    def set_file(self, fname: str):
-        self.fname = fname
+    def set_file(self, filename: str):
+        self.filename = filename
 
-        img_dir, img_name = os.path.split(self.fname)
+        img_dir, img_name = os.path.split(self.filename)
 
         if self.out is None:
             self.out = os.path.splitext(img_name)[0]
             self.out = os.path.join(img_dir, self.out)
 
+        return self
+
     def set_output_dir(self, out: str):
         self.out = out
+        return self
 
     def set_threshold(self, threshold: int):
         self.threshold = threshold
+        return self
 
     def force_redo_on(self):
         self.force_redo = True
+        return self
 
     def force_redo_off(self):
         self.force_redo = False
+        return self
 
     def set_force_redo(self, force: bool):
         self.force_redo = force
+        return self
 
     def quality_on(self):
         self.quality = True
+        return self
 
     def quality_off(self):
         self.quality = False
+        return self
 
     def set_quality(self, quality: bool):
         self.quality = quality
+        return self
 
     def asynchronous_on(self):
         self.asynchronous = True
+        return self
 
     def asynchronous_off(self):
         self.asynchronous = False
+        return self
 
     def set_asynchronous(self, asynchronous: bool):
         self.asynchronous = asynchronous
+        return self
 
-    def plot(self, results, units=''):
+    def _plot(self):
         fig, ax = plt.subplots(1, 2)
 
-        plot_segmentation(results, ax=ax[0])
+        plot_segmentation(self.neurons, ax=ax[0])
 
         ax[0].set_xlabel('X [px]')
         ax[0].set_ylabel('Y [px]')
 
         swcs = []
-        for neuron in results:
+        for neuron in self.neurons:
             swcs.append(neuron.swc)
 
-        plot_swcs(swcs, ax=ax[1], units=units)
+        plot_swcs(swcs, ax=ax[1], units=self.voxel_unit_str)
 
         fig.show()
-
-    @staticmethod
-    def trace_single(neuron, threshold, speed, quality, force_retrace, scale):
-        starttime = time.time()
-        img = neuron.img
-        neuron.swc_fname = '{}{}'.format(neuron.img_fname.split(RIVULET_2_TREE_IMG_EXT)[0], RIVULET_2_TREE_SWC_EXT)
-
-        if os.path.exists(neuron.swc_fname) and not force_retrace:
-            swc_mat = loadswc(neuron.swc_fname)
-            swc = SWC()
-            swc._data = swc_mat
-            neuron.add_SWC(swc)
-            print(f'Neuron ({neuron.num})\t --Loaded SWC from disk')
-        else:
-            if threshold in (float, int):
-                pass
-            elif type(threshold) is str:
-                _, reg_thresh = apply_threshold(img, mthd=threshold)
-            else:
-                _, reg_thresh = apply_threshold(img, mthd='Max Entropy')
-
-            img: np.ndarray = sitk.GetArrayFromImage(img)
-            img = np.moveaxis(img, 0, -1)
-            img = np.swapaxes(img, 0, 1)
-
-            img, crop_region = crop(img, reg_thresh)  # Crop by default
-            print(f'Neuron ({neuron.num})\t --Tracing neuron of shape {img.shape} '
-                  f'with a threshold of {reg_thresh}')
-
-            # Run rivulet2 for the first time
-            skeletonize = False
-            tracer = R2Tracer(quality=quality,
-                              silent=True,
-                              speed=speed,
-                              clean=True,
-                              non_stop=False,
-                              skeletonize=skeletonize)
-
-            swc, soma = tracer.trace(img, reg_thresh)
-            print('Neuron ({})\t -- Finished: {:.2f} sec.'.format(neuron.num, time.time() - starttime))
-
-            # if skeletonized, re-estimate the radius for each node
-            if skeletonize:
-                print('Re-estimating radius...')
-                swc_arr = swc.get_array()
-                for i in range(swc_arr.shape[0]):
-                    swc_arr[i, 5] = estimate_radius(swc_arr[i, 2:5], img > reg_thresh)
-                swc._data = swc_arr
-
-            swc.clean()
-
-            swc.apply_soma_TypeID(soma)
-
-            swc.reset(crop_region, 1)
-
-            swc.apply_scale(scale)
-
-            swc.save(neuron.swc_fname)
-            neuron.add_SWC(swc)
-
-        return neuron
 
     @staticmethod
     def get_voltage_single(neuron: Neuron, img: Image, radius):
@@ -173,7 +126,7 @@ class VITracer():
         plt.show()
 
     def get_voltage(self):
-        img = loadimg(self.file, 1)
+        img = loadimg(self.filename, 1)
 
         if self.asynchronous:
             with Pool(processes=os.cpu_count() - 1) as pool:
@@ -189,27 +142,9 @@ class VITracer():
             for neuron in self.neurons:
                 results.append(self.get_voltage_single(neuron, img, 20))
 
-    def _must_read_segmentation_file(self):
-        (os.path.exists(save_dir)
-         and not self.force_recalculate
-         and any([check_long_ext(fname, RIVULET_2_TREE_IMG_EXT) for fname in os.listdir(save_dir)]))
-
-    def _read_segmentation_from_file(self):
-
-
-    def execute(self):
-
-        if self.threshold is not None and not isinstance(self.threshold, (int, float, str)):
-            raise TypeError(
-                'Expected threshold to be either of type str, specifiying an automatic thresholding method \n',
-                f'or a number, specifying the threshold value, instead got {type(self.threshold)}')
-
-
-
-
-
+    def _read_metadata(self):
         file_reader = sitk.ImageFileReader()
-        file_reader.SetFileName(self.file)
+        file_reader.SetFileName(self.filename)
         file_reader.ReadImageInformation()
 
         if 'ImageDescription' in file_reader.GetMetaDataKeys():
@@ -290,78 +225,177 @@ class VITracer():
         if frames is not None:
             frames = int(frames)
 
-        if :
+        self.frames = frames
+        self.z_depth = z_depth
+        self.voxelsize = voxelsize
+        self.voxel_unit_str = voxel_unit_str
+        self.period = period
+        self.period_unit_str = period_unit_str
 
-            neurons = []
-            for fname in os.listdir(save_dir):
-                if check_long_ext(fname, RIVULET_2_TREE_IMG_EXT):
-                    loc = os.path.join(save_dir, fname)
-                    image = loadimg(loc, 1)
-                    neurons.append(Neuron(image, img_fname=loc, num=len(neurons)))
-            print(f'Loaded {len(neurons)} neuron images from file.')
+    def _must_read_segmentation_file(self):
+        return (
+                os.path.exists(self.out)
+                and not self.force_redo
+                and any([check_long_ext(fname, RIVULET_2_TREE_IMG_EXT) for fname in os.listdir(self.out)])
+        )
+
+    def _read_segmentation_from_file(self):
+        self.neurons = []
+        for fname in os.listdir(self.out):
+            if check_long_ext(fname, RIVULET_2_TREE_IMG_EXT):
+                loc = os.path.join(self.out, fname)
+                image = loadimg(loc, 1)
+                self.neurons.append(Neuron(image, img_fname=loc, num=len(self.neurons)))
+        print(f'Loaded {len(self.neurons)} neuron images from file.')
+
+    def _segment(self):
+        ################ LOAD IMAGE AND METADATA #################
+        img = loadimg(self.filename, 1)
+        X_size, Y_size, stacks = img.GetSize()
+
+        ######## CREATE PROJECTIONS FOR TRACING AND VOLTAGE IMAGE DATA ANALYSIS ##########
+
+        assert stacks == (self.frames * self.z_depth), \
+            (f'Image dimensions do not match metadata. Number of stacks: {stacks} should equal \n' 
+             'the number of Z-stacks * number of frames: \n'
+             f'({self.frames} * {self.z_depth} = {self.frames * self.z_depth} != {stacks}')
+
+        # Project to 3D image to get geometry
+        T_project = np.reshape(sitk.GetArrayFromImage(img), (self.frames, self.z_depth, X_size, Y_size))
+        T_project = np.amax(T_project, axis=0)
+
+        del img  # Get huge image out of memory ASAP
+
+        T_project = sitk.GetImageFromArray(T_project)
+
+        # Write image to test segmentation
+        # sitk.WriteImage(T_project, 'Projected.tif')
+
+        # Create a new directory next to the input file for the SWC outputs
+        if not os.path.exists(self.out):
+            os.mkdir(self.out)
+
+        neuronsegmentor = NeuronSegmentor(T_project)
+        self.neurons = neuronsegmentor.neurons
+
+        # DEBUG PLOTS
+        # neuronsegmentor.plot()
+        # neuronsegmentor.plot_full_segmentation()
+
+    def _write_segmentation_to_file(self):
+        for ii, neuron in enumerate(self.neurons):
+            # Store images
+            img_fname = 'neuron_{:04d}{}'.format(ii, RIVULET_2_TREE_IMG_EXT)
+            loc = os.path.join(self.out, img_fname)
+            neuron.img_fname = loc
+            sitk.WriteImage(neuron.img, neuron.img_fname)
+        print(f'Segmented image into {len(self.neurons)} neurons.')
+
+    @staticmethod
+    def _trace_single(neuron, threshold, speed, quality, force_retrace, scale):
+        starttime = time.time()
+        img = neuron.img
+        neuron.swc_fname = '{}{}'.format(neuron.img_fname.split(RIVULET_2_TREE_IMG_EXT)[0], RIVULET_2_TREE_SWC_EXT)
+
+        if os.path.exists(neuron.swc_fname) and not force_retrace:
+            swc_mat = loadswc(neuron.swc_fname)
+            swc = SWC()
+            swc._data = swc_mat
+            neuron.add_SWC(swc)
+            print(f'Neuron ({neuron.num})\t --Loaded SWC from disk')
         else:
-            ################ LOAD IMAGE AND METADATA #################
-            img = loadimg(self.file, 1)
-            X_size, Y_size, stacks = img.GetSize()
+            if threshold in (float, int):
+                pass
+            elif type(threshold) is str:
+                _, reg_thresh = apply_threshold(img, mthd=threshold)
+            else:
+                _, reg_thresh = apply_threshold(img, mthd='Max Entropy')
 
-            ######## CREATE PROJECTIONS FOR TRACING AND VOLTAGE IMAGE DATA ANALYSIS ##########
+            img: np.ndarray = sitk.GetArrayFromImage(img)
+            img = np.moveaxis(img, 0, -1)
+            img = np.swapaxes(img, 0, 1)
 
-            # Project to 3D image to get geometry
-            T_project = np.reshape(sitk.GetArrayFromImage(img), (frames, z_depth, X_size, Y_size))
-            T_project = np.amax(T_project, axis=0)
+            img, crop_region = crop(img, reg_thresh)  # Crop by default
+            print(f'Neuron ({neuron.num})\t --Tracing neuron of shape {img.shape} '
+                  f'with a threshold of {reg_thresh}')
 
-            del (img)  # Get huge image out of memory ASAP
+            # Run rivulet2 for the first time
+            skeletonize = False
+            tracer = R2Tracer(quality=quality,
+                              silent=True,
+                              speed=speed,
+                              clean=True,
+                              non_stop=False,
+                              skeletonize=skeletonize)
 
-            T_project = sitk.GetImageFromArray(T_project)
+            swc, soma = tracer.trace(img, reg_thresh)
+            print('Neuron ({})\t -- Finished: {:.2f} sec.'.format(neuron.num, time.time() - starttime))
 
-            # Write image to test segmentation
-            # sitk.WriteImage(T_project, 'Projected.tif')
+            # if skeletonized, re-estimate the radius for each node
+            if skeletonize:
+                print('Re-estimating radius...')
+                swc_arr = swc.get_array()
+                for i in range(swc_arr.shape[0]):
+                    swc_arr[i, 5] = estimate_radius(swc_arr[i, 2:5], img > reg_thresh)
+                swc._data = swc_arr
 
-            # Create a new directory next to the input file for the SWC outputs
-            if not os.path.exists(save_dir):
-                os.mkdir(save_dir)
+            swc.clean()
 
-            neuronsegmentor = NeuronSegmentor(T_project)
-            neurons = neuronsegmentor.neurons
+            swc.apply_soma_TypeID(soma)
 
-            # DEBUG PLOTS
-            # neuronsegmentor.plot()
-            # neuronsegmentor.plot_full_segmentation()
+            swc.reset(crop_region, 1)
 
-            for ii, neuron in enumerate(neurons):
-                # Store images
-                img_fname = 'neuron_{:04d}{}'.format(ii, RIVULET_2_TREE_IMG_EXT)
-                loc = os.path.join(save_dir, img_fname)
-                neuron.img_fname = loc
-                sitk.WriteImage(neuron.img, neuron.img_fname)
-            print(f'Segmented image into {len(neurons)} neurons.')
+            swc.apply_scale(scale)
 
+            swc.save(neuron.swc_fname)
+            neuron.add_SWC(swc)
+
+        return neuron
+
+    def _trace_all(self):
         if self.asynchronous:
             with Pool(processes=os.cpu_count() - 1) as pool:
                 result_buffers = []
-                for neuron in neurons:
-                    result = pool.apply_async(self.trace_single,
+                for neuron in self.neurons:
+                    result = pool.apply_async(self._trace_single,
                                               (neuron,
                                                self.threshold,
-                                               self.speed,
+                                               self._speed,
                                                self.quality,
-                                               self.force_recalculate,
+                                               self.force_redo,
                                                self.voxelsize))
                     result_buffers.append(result)
 
-                results = [result.get() for result in result_buffers]
+                self.neurons = [result.get() for result in result_buffers]
         else:
-            results = []
-            for neuron in neurons:
-                results.append(neuron,
-                               self.threshold,
-                               self.speed,
-                               self.quality,
-                               self.force_recalculate,
-                               self.voxelsize))
+            result_buffers = []
+            for neuron in self.neurons:
+                result_buffers.append(self._trace_single(neuron,
+                                               self.threshold,
+                                               self._speed,
+                                               self.quality,
+                                               self.force_redo,
+                                               self.voxelsize))
 
-        self.get_voltage(file, results, asynchronous=False)
+            self.neurons = result_buffers
+    def execute(self):
 
-        self.plot(results, units=voxel_unit_str)
+        if self.threshold is not None and not isinstance(self.threshold, (int, float, str)):
+            raise TypeError(
+                'Expected threshold to be either of type str, specifiying an automatic thresholding method \n',
+                f'or a number, specifying the threshold value, instead got {type(self.threshold)}')
 
-        return results
+        self._read_metadata()
+
+        if self._must_read_segmentation_file():
+            self._read_segmentation_from_file()
+        else:
+            self._segment()
+            self._write_segmentation_to_file()
+
+        self._trace_all()
+        # self.get_voltage(file, results, asynchronous=False)
+
+        self._plot()
+
+        return self.neurons
