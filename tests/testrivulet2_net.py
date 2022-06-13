@@ -1,4 +1,4 @@
-from rivunetpy.rivunetpy import VITracer as Tracer
+from rivunetpy.rivunetpy import Tracer
 
 import time
 

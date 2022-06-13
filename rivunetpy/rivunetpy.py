@@ -39,6 +39,10 @@ class VITracer():
         self._speed = False
         self.hyperstack = True
 
+        self.X_size = None
+        self.Y_size = None
+        self.stacks = None
+
     def set_file(self, filename: str):
         self.filename = filename
 
@@ -126,97 +130,9 @@ class VITracer():
 
         fig.show()
 
+    def _convert_hyperstack_to_4D_image(self, img: sitk.Image):
 
-
-    def _read_metadata(self):
-        file_reader = sitk.ImageFileReader()
-        file_reader.SetFileName(self.filename)
-        file_reader.ReadImageInformation()
-
-        if 'ImageDescription' in file_reader.GetMetaDataKeys():
-            img_info = [pair.split('=') for pair in file_reader.GetMetaData('ImageDescription').split('\n')]
-            img_info.remove([''])
-            img_info = dict(img_info)
-        else:
-            img_info = {}
-            warnings.warn('rtracenet: Warning, could not read metadata from image. Consider using a tool such as \n'
-                          'ImageJ to set the metadata. Ignoring this error might lead to unexpected behavior.')
-
-        is_hyperstack = img_info.get('hyperstack')
-
-        voxelsize = img_info.get('spacing')
-        voxel_unit = img_info.get('unit')
-        voxel_unit_str = None
-
-        period = img_info.get('finterval')
-        period_unit = img_info.get('tunit')
-        period_unit_str = None
-
-        z_depth = img_info.get('slices')
-        frames = img_info.get('frames')
-
-        if is_hyperstack is not None:
-            if is_hyperstack == 'false':
-                raise IOError(
-                    'Input image should be 4D voltage imaging data. The first three dimensions should be from \n'
-                    'a 3D confocal image stack. The final fourth dimension should be time. \n'
-                    'Finally, please format the image as a hyperstack in ImageJ.')
-
-        if voxelsize is not None and voxel_unit is not None:
-            if voxel_unit == '\\u00B5m':  # Micrometers
-                voxel_unit_str = '$\\mu\\mathrm{m}$'
-                voxelsize = float(voxelsize)
-
-            elif voxel_unit == 'mm':
-                voxel_unit_str = '$\\mu\\mathrm{m}$'  # Convert to micrometers
-                voxelsize = float(voxelsize * 1E3)
-
-            elif voxel_unit == 'nm':
-                voxel_unit_str = '$\\mu\\mathrm{m}$'  # Convert to micrometers
-                voxelsize = float(voxelsize / 1E3)
-
-            else:
-                raise IOError(f'Input image has voxels with unknown unit {voxel_unit}. \n'
-                              'Please use a tool such as ImageJ to specify the voxel size.')
-        else:
-            warnings.warn('rtracenet: Warning, no voxel size found, using pixel units for SWC files instead.')
-            voxel_unit_str = 'px'
-            voxelsize = 1
-
-        if period is not None and period_unit is not None:
-            if period_unit == 'ms':
-                period_unit_str = 'ms'
-                period = float(period)
-
-            elif period_unit in ['seconds', 'sec', 's']:
-                period_unit_str = 'ms'
-                period = float(period) * 1000
-
-            elif period_unit == '\\u00B5s':
-                period_unit_str = 'ms'
-                period = float(period) / 1000
-
-            else:
-                raise IOError(f'Input image has timescale with unknown unit {period_unit}. \n'
-                              'Please use a tool such as ImageJ to specify the voxel size.')
-
-        else:
-            warnings.warn('rtracenet: Warning, no time unit found, using unitless timescales instead.')
-            period_unit_str = '1'
-            period = 1
-
-        if z_depth is not None:
-            z_depth = int(z_depth)
-
-        if frames is not None:
-            frames = int(frames)
-
-        self.frames = frames
-        self.z_depth = z_depth
-        self.voxelsize = voxelsize
-        self.voxel_unit_str = voxel_unit_str
-        self.period = period
-        self.period_unit_str = period_unit_str
+        img = np.reshape(sitk.GetArrayFromImage(img), (self.frames, self.z_depth, X_size, Y_size))
 
     def _must_read_segmentation_file(self):
         return (
@@ -237,7 +153,7 @@ class VITracer():
     def _segment(self):
         ################ LOAD IMAGE AND METADATA #################
         img = loadimg(self.filename, 1)
-        X_size, Y_size, stacks = img.GetSize()
+        self.X_size, self.Y_size, self.stacks = img.GetSize()
 
         ######## CREATE PROJECTIONS FOR TRACING AND VOLTAGE IMAGE DATA ANALYSIS ##########
 
@@ -367,7 +283,7 @@ class VITracer():
 
     @staticmethod
     def _get_voltage_single(neuron: Neuron, img: Image, radius):
-        soma_centroid = neuron.swc._data[0, 2:5]  # XYZ of soma in SWC
+        soma_centroid = neuron.swc._data[0, 2:5]  # XYZ of soma in cleaned SWC
 
         mask = sitk.Image(img.GetSize(), img.GetPixelID())
 
@@ -420,3 +336,117 @@ class VITracer():
         self._plot()
 
         return self.neurons
+
+class HyperStack(Image):
+
+    def __init__(self, *args, **kwargs):
+        self.frames = None
+        self.z_depth = None
+        self.voxelsize = None
+        self.voxel_unit_str = None
+        self.period = None
+        self.period_unit_str = None
+
+        super().__init__(*args, **kwargs)
+
+    def _read_metadata(self, filename):
+        file_reader = sitk.ImageFileReader()
+        file_reader.SetFileName(filename)
+        file_reader.ReadImageInformation()
+
+        if 'ImageDescription' in file_reader.GetMetaDataKeys():
+            img_info = [pair.split('=') for pair in file_reader.GetMetaData('ImageDescription').split('\n')]
+            img_info.remove([''])
+            img_info = dict(img_info)
+        else:
+            img_info = {}
+            warnings.warn('rtracenet: Warning, could not read metadata from image. Consider using a tool such as \n'
+                          'ImageJ to set the metadata. Ignoring this error might lead to unexpected behavior.')
+
+        is_hyperstack = img_info.get('hyperstack')
+
+        voxelsize = img_info.get('spacing')
+        voxel_unit = img_info.get('unit')
+        voxel_unit_str = None
+
+        period = img_info.get('finterval')
+        period_unit = img_info.get('tunit')
+        period_unit_str = None
+
+        z_depth = img_info.get('slices')
+        frames = img_info.get('frames')
+
+        if is_hyperstack is not None:
+            if is_hyperstack == 'false':
+                raise IOError(
+                    'Input image should be 4D voltage imaging data. The first three dimensions should be from \n'
+                    'a 3D confocal image stack. The final fourth dimension should be time. \n'
+                    'Finally, please format the image as a hyperstack in ImageJ.')
+
+        if voxelsize is not None and voxel_unit is not None:
+            if voxel_unit == '\\u00B5m':  # Micrometers
+                voxel_unit_str = '$\\mu\\mathrm{m}$'
+                voxelsize = float(voxelsize)
+
+            elif voxel_unit == 'mm':
+                voxel_unit_str = '$\\mu\\mathrm{m}$'  # Convert to micrometers
+                voxelsize = float(voxelsize * 1E3)
+
+            elif voxel_unit == 'nm':
+                voxel_unit_str = '$\\mu\\mathrm{m}$'  # Convert to micrometers
+                voxelsize = float(voxelsize / 1E3)
+
+            else:
+                raise IOError(f'Input image has voxels with unknown unit {voxel_unit}. \n'
+                              'Please use a tool such as ImageJ to specify the voxel size.')
+        else:
+            warnings.warn('HyperStack: Warning, no voxel size found, using pixel units for instead.')
+            voxel_unit_str = 'px'
+            voxelsize = 1
+
+        if period is not None and period_unit is not None:
+            if period_unit == 'ms':
+                period_unit_str = 'ms'
+                period = float(period)
+
+            elif period_unit in ['seconds', 'sec', 's']:
+                period_unit_str = 'ms'
+                period = float(period) * 1000
+
+            elif period_unit == '\\u00B5s':
+                period_unit_str = 'ms'
+                period = float(period) / 1000
+
+            else:
+                raise IOError(f'Input image has timescale with unknown unit {period_unit}. \n'
+                              'Please use a tool such as ImageJ to specify the voxel size.')
+
+        else:
+            warnings.warn('HyperStack: Warning, no time unit found, using unitless timescales instead.')
+            period_unit_str = '1'
+            period = 1
+
+        if z_depth is not None:
+            z_depth = int(z_depth)
+
+        if frames is not None:
+            frames = int(frames)
+
+        self.frames = frames
+        self.z_depth = z_depth
+        self.voxelsize = voxelsize
+        self.voxel_unit_str = voxel_unit_str
+        self.period = period
+        self.period_unit_str = period_unit_str
+
+    @classmethod
+    def from_file(cls, fname):
+        # TODO: class for handling hyperstacks
+        img = cls([1, 1], sitk.sitkUInt8) # Skeleton class
+        img._read_metadata(fname)
+
+
+
+
+
+
