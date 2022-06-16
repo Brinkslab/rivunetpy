@@ -20,10 +20,43 @@ from rivunetpy.utils.segmentation import NeuronSegmentor
 from rivunetpy.utils.cells import Neuron
 from rivunetpy.utils.extensions import RIVULET_2_TREE_SWC_EXT, RIVULET_2_TREE_IMG_EXT
 
+from contextlib import redirect_stdout
+
 
 def check_long_ext(file_to_check, ext):
     return file_to_check.split(os.extsep, 1)[-1] == ext.split(os.extsep, 1)[-1]
 
+def convert_hyperstack_to_4D_image(img: sitk.Image, z_depth, frames):
+    X_size, Y_size, stacks = img.GetSize()
+    return sitk.GetImageFromArray(
+        np.reshape(
+            sitk.GetArrayFromImage(img), (frames, z_depth, X_size, Y_size)
+        ), isVector=False)
+
+def read_metadata(fname, key=None):
+    file_reader = sitk.ImageFileReader()
+    file_reader.SetFileName(fname)
+    file_reader.ReadImageInformation()
+
+    if key:
+        keys = [key]
+    else:
+        keys = [key for key in file_reader.GetMetaDataKeys()]
+
+    all_info = {}
+    for key_to_read in keys:
+        if key_to_read in file_reader.GetMetaDataKeys():
+            img_info = [pair.split('=') for pair in file_reader.GetMetaData(key_to_read).split('\n')]
+            img_info.remove([''])
+            img_info = dict(img_info)
+
+            all_info.update(img_info)
+        else:
+            warnings.warn(f'rtracenet: Warning, could not read metadata with key {key_to_read} from image. \n'
+                          f'Consider using a tool such as ImageJ to set the metadata. \n '
+                          f'Ignoring this error might lead to unexpected behavior.')
+
+    return all_info
 
 class VITracer():
     # TODO: Clean up new class-based mehtods
@@ -130,10 +163,6 @@ class VITracer():
 
         fig.show()
 
-    def _convert_hyperstack_to_4D_image(self, img: sitk.Image):
-
-        img = np.reshape(sitk.GetArrayFromImage(img), (self.frames, self.z_depth, X_size, Y_size))
-
     def _must_read_segmentation_file(self):
         return (
                 os.path.exists(self.out)
@@ -157,7 +186,7 @@ class VITracer():
 
         ######## CREATE PROJECTIONS FOR TRACING AND VOLTAGE IMAGE DATA ANALYSIS ##########
 
-        assert stacks == (self.frames * self.z_depth), \
+        assert self.stacks == (self.frames * self.z_depth), \
             (f'Image dimensions do not match metadata. Number of stacks: {stacks} should equal \n' 
              'the number of Z-stacks * number of frames: \n'
              f'({self.frames} * {self.z_depth} = {self.frames * self.z_depth} != {stacks}')
@@ -337,31 +366,21 @@ class VITracer():
 
         return self.neurons
 
-def read_metadata(fname, key=None):
-    file_reader = sitk.ImageFileReader()
-    file_reader.SetFileName(fname)
-    file_reader.ReadImageInformation()
+# https://stackoverflow.com/questions/6796492/temporarily-redirect-stdout-stderr
+class RedirectStdStreams(object):
+    def __init__(self, stdout=None, stderr=None):
+        self._stdout = stdout or sys.stdout
+        self._stderr = stderr or sys.stderr
 
-    if key:
-        keys = [key]
-    else:
-        keys = [key for key in file_reader.GetMetaDataKeys()]
+    def __enter__(self):
+        self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
+        self.old_stdout.flush(); self.old_stderr.flush()
+        sys.stdout, sys.stderr = self._stdout, self._stderr
 
-    all_info = {}
-    for key_to_read in keys:
-        if key_to_read in file_reader.GetMetaDataKeys():
-            img_info = [pair.split('=') for pair in file_reader.GetMetaData(key_to_read).split('\n')]
-            img_info.remove([''])
-            img_info = dict(img_info)
-        else:
-            img_info = {}
-            warnings.warn(f'rtracenet: Warning, could not read metadata with key {key_to_read} from image. \n'
-                          f'Consider using a tool such as ImageJ to set the metadata. \n '
-                          f'Ignoring this error might lead to unexpected behavior.')
-
-        all_info.update(img_info)
-
-    return all_info
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._stdout.flush(); self._stderr.flush()
+        sys.stdout = self.old_stdout
+        sys.stderr = self.old_stderr
 
 class HyperStack(Image):
 
@@ -456,10 +475,39 @@ class HyperStack(Image):
 
     @classmethod
     def from_file(cls, fname):
-        # TODO: class for handling hyperstacks
         # Hacky bootstrapping to read the file
-        img = cls([1, 1], sitk.sitkUInt8) # Skeleton class
-        img._read_metadata(fname)
+
+
+        img = sitk.ReadImage(fname)
+        metadata = read_metadata(fname, key='ImageDescription')
+        slices = metadata.get('slices')
+        frames = metadata.get('frames')
+
+        if slices is None or frames is None:
+            raise IOError('Error while loading hyperstack. Metadata was found but could not by interpreted. \n' 
+                          'Try editing the orignal image in ImageJ.')
+
+        slices = int(slices)
+        frames = int(frames)
+
+        assert metadata.get('hyperstack') == 'true', ('Error while loading hyperstack. Image is not flagged as \n' 
+                                                      'hyperstack. Try editing it in ImageJ.')
+        X_size, Y_size, stacks = img.GetSize()
+
+        hyperstack = cls((X_size, Y_size, slices, frames), img.GetPixelID())
+
+        img = convert_hyperstack_to_4D_image(img, slices, frames)
+
+        hyperstack[:, :, :, :] = img[:, :, :, :]
+
+        hyperstack._read_metadata(fname)
+
+        sitk.ProcessObject_SetGlobalWarningDisplay(True)
+
+        return hyperstack
+
+    # TODO: slices
+
 
 
 
