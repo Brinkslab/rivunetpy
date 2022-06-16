@@ -337,6 +337,32 @@ class VITracer():
 
         return self.neurons
 
+def read_metadata(fname, key=None):
+    file_reader = sitk.ImageFileReader()
+    file_reader.SetFileName(fname)
+    file_reader.ReadImageInformation()
+
+    if key:
+        keys = [key]
+    else:
+        keys = [key for key in file_reader.GetMetaDataKeys()]
+
+    all_info = {}
+    for key_to_read in keys:
+        if key_to_read in file_reader.GetMetaDataKeys():
+            img_info = [pair.split('=') for pair in file_reader.GetMetaData(key_to_read).split('\n')]
+            img_info.remove([''])
+            img_info = dict(img_info)
+        else:
+            img_info = {}
+            warnings.warn(f'rtracenet: Warning, could not read metadata with key {key_to_read} from image. \n'
+                          f'Consider using a tool such as ImageJ to set the metadata. \n '
+                          f'Ignoring this error might lead to unexpected behavior.')
+
+        all_info.update(img_info)
+
+    return all_info
+
 class HyperStack(Image):
 
     def __init__(self, *args, **kwargs):
@@ -350,18 +376,7 @@ class HyperStack(Image):
         super().__init__(*args, **kwargs)
 
     def _read_metadata(self, filename):
-        file_reader = sitk.ImageFileReader()
-        file_reader.SetFileName(filename)
-        file_reader.ReadImageInformation()
-
-        if 'ImageDescription' in file_reader.GetMetaDataKeys():
-            img_info = [pair.split('=') for pair in file_reader.GetMetaData('ImageDescription').split('\n')]
-            img_info.remove([''])
-            img_info = dict(img_info)
-        else:
-            img_info = {}
-            warnings.warn('rtracenet: Warning, could not read metadata from image. Consider using a tool such as \n'
-                          'ImageJ to set the metadata. Ignoring this error might lead to unexpected behavior.')
+        img_info = read_metadata(filename, key='ImageDescription')
 
         is_hyperstack = img_info.get('hyperstack')
 
@@ -442,8 +457,11 @@ class HyperStack(Image):
     @classmethod
     def from_file(cls, fname):
         # TODO: class for handling hyperstacks
+        # Hacky bootstrapping to read the file
         img = cls([1, 1], sitk.sitkUInt8) # Skeleton class
         img._read_metadata(fname)
+
+
 
 
 
