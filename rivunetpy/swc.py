@@ -211,8 +211,17 @@ class SWC(object):
         # Reset ParentID of point 0 to -1 (Root), as this might be changed by the mask
         self._data[0, 6] = -1
 
-    def apply_scale(self, factor):
-        self._data[:, [2, 3, 4, 5]] = self._data[:, [2, 3, 4, 5]] * factor # Scale X, Y, Z and R dimensions by a factor
+    def apply_scale(self, factors: tuple):
+
+        self._data[:, 2] = self._data[:, 2] * factors[0] # Scale X
+        self._data[:, 3] = self._data[:, 3] * factors[1] # Scale Y
+        self._data[:, 4] = self._data[:, 4] * factors[2] # Scale Y
+
+        # TODO: Nice implementation for scaling section radii based on voxel size
+        # This would likely involve figuring out where the line spanning from childID to parentID is pointing to
+        # correctly scale the radius with an appropriate weight for each direction
+        self._data[:, 5] = self._data[:, 5] * np.mean(factors)
+
 
     def _prune_leaves(self):
         # Find all the leaves

@@ -8,9 +8,9 @@ if __name__ == '__main__':
     filename = r'data\dataset_s0_c9_4D_20dB_SNR.tif'
 
     tracer = Tracer()
-    tracer.set_file(filename)\
-        .asynchronous_on()\
-        .execute()
+    tracer.set_file(filename)
+    tracer.asynchronous_off()
+    neurons = tracer.execute()
 
     print(f'\n\nDone in {time.time() - start_time} s')
 

@@ -702,7 +702,7 @@ class NeuronSegmentor:
         for ii, label in enumerate(self.__region_labels):
             region = self.regions == label
             image = self.img * sitk.Cast(region, self.PixelID)
-            neurons.append(Neuron(image, num=ii))
+            neurons.append(Neuron(image, num=ii, soma_radius=self.soma_scale))
 
         return neurons
 
