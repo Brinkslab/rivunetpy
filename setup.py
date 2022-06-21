@@ -3,7 +3,7 @@ from setuptools import setup, Extension
 from setuptools import find_packages
 import numpy as np
 
-VERSION = '0.4.0'
+VERSION = '0.4.1'
 classifiers = [
     # How mature is this project? Common values are
     #   3 - Alpha
