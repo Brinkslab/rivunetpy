@@ -3,7 +3,7 @@ from setuptools import setup, Extension
 from setuptools import find_packages
 import numpy as np
 
-VERSION = '0.4.2'
+VERSION = '0.4.3'
 classifiers = [
     # How mature is this project? Common values are
     #   3 - Alpha
@@ -48,7 +48,7 @@ REQS = ['numpy>=1.8.0',
 
 ext_modules = [
     Extension(
-        'rivunetpy.msfm',
+        'msfm',
         sources=[
             os.path.join('rivunetpy', 'msfm', 'msfmmodule.c'),
             os.path.join('rivunetpy', 'msfm', '_msfm.c'),

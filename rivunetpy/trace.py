@@ -7,7 +7,7 @@ from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage.morphology import binary_dilation
 from skimage.morphology import skeletonize_3d
 
-import rivunetpy.msfm as msfm
+import msfm
 from rivunetpy.soma import Soma
 from rivunetpy.swc import SWC
 
