@@ -105,7 +105,8 @@ class HyperStack(Image):
 
         z_voxel_size = metadata_dict.get('spacing')
         z_voxel_unit = metadata_dict.get('unit')
-        voxel_unit_str = '$\\mu\\mathrm{m}$' # um, for plotting
+        MU_STRING = r'$\mathrm{\mu m}$'
+        voxel_unit_str = MU_STRING # um, for plotting
 
         period = metadata_dict.get('finterval')
         period_unit = metadata_dict.get('tunit')
@@ -176,7 +177,7 @@ class HyperStack(Image):
         self.period_unit_str = period_unit_str
         self.x_size, self.y_size = self.GetSize()[:2]
 
-        vx_u = 'um' if self.voxel_unit_str == '$\\mu\\mathrm{m}$' else self.voxel_unit_str
+        vx_u = 'um' if self.voxel_unit_str == MU_STRING else self.voxel_unit_str
 
         print('Imported hyperstack with metadata:\n'
               f'\tVoxel size: {self.voxel_size[0]:.4f} {vx_u} * {self.voxel_size[1]:.4f} {vx_u} '
@@ -257,7 +258,7 @@ class Tracer():
         self.out = None
         self.threshold = None
         self.tolerance = 0.2
-        self.force_redo = False
+        self.overwrite_cache = False
         self.quality = False
         self.asynchronous = True
         self.neurons = None
@@ -288,16 +289,16 @@ class Tracer():
         self.tolerance = tolerance
         return self
 
-    def force_redo_on(self):
-        self.force_redo = True
+    def overwrite_cache_on(self):
+        self.overwrite_cache = True
         return self
 
-    def force_redo_off(self):
-        self.force_redo = False
+    def overwrite_cache_off(self):
+        self.overwrite_cache = False
         return self
 
-    def set_force_redo(self, force: bool):
-        self.force_redo = force
+    def set_overwrite_cache(self, overwrite: bool):
+        self.overwrite_cache = overwrite
         return self
 
     def quality_on(self):
@@ -338,11 +339,20 @@ class Tracer():
 
     def _plot(self):
 
-        fig = plt.figure(0, dpi=300)
+        rc = {"font.family": "serif",
+              "mathtext.fontset": "stix"}
+        plt.rcParams.update(rc)
+        plt.rcParams["font.serif"] = ["Cambria Math"] + plt.rcParams["font.serif"]
+
+        fig = plt.figure(1, dpi=300)
         ax1 = plt.subplot(221)
         ax2 = plt.subplot(222)
         ax3 = plt.subplot(212)
         # fig, ax = plt.subplots(1, 2)
+
+
+
+
 
         plot_segmentation(self.neurons, ax=ax1)
 
@@ -361,28 +371,42 @@ class Tracer():
         ax3.set_title('Dynamics')
         all_intensities = []
         for neuron in self.neurons:
-            all_intensities.append(neuron.intensities)
+            all_intensities.append(neuron.intensities[0])
 
         all_intensities = np.array(all_intensities)
         im = ax3.imshow(all_intensities,
                         aspect='auto',
                         interpolation=None,
+                        cmap='gray',
                         extent=[0, self.hyperstack.frames * self.hyperstack.period, 1, len(self.neurons) + 1])
-        fig.colorbar(im)
+        cbar = fig.colorbar(im)
+        cbar.ax.get_yaxis().labelpad = 15
+        cbar.ax.set_ylabel(r'$I_{max}\;\mathrm{ [1]}$ ', rotation=270)
 
-            #ax3.plot(tt, neuron.intensities, label=neuron.num)
+        ax3.set_yticks([])
+        # for minor ticks
+        ax3.set_yticks([], minor=True)
+
+        #ax3.plot(tt, neuron.intensities, label=neuron.num)
 
 
-        ax3.set_xlabel(f't [{self.hyperstack.period_unit_str}]')
+        ax3.set_xlabel(r'$t \;\mathrm{ [' + self.hyperstack.period_unit_str + r'}]$')
         ax3.set_ylabel('Neuron')
         # plt.legend(loc='best')
+
+        ax1.text(0.05, 0.95, 'A', transform=ax1.transAxes,
+                 fontsize=None, fontweight='bold', va='top', color='white',)
+        ax2.text(0.05, 0.95, 'B', transform=ax2.transAxes,
+                 fontsize=None, fontweight='bold', va='top')
+        ax3.text(0.025, 0.95, 'C', transform=ax3.transAxes,
+                 fontsize=None, fontweight='bold', va='top', color='white')
 
         fig.show()
 
     def _must_read_segmentation_file(self):
         return (
                 os.path.exists(self.out)
-                and not self.force_redo
+                and not self.overwrite_cache
                 and any([check_long_ext(fname, RIVULET_2_TREE_IMG_EXT) for fname in os.listdir(self.out)])
         )
 
@@ -499,7 +523,7 @@ class Tracer():
                                                self.threshold,
                                                self._speed,
                                                self.quality,
-                                               self.force_redo,
+                                               self.overwrite_cache,
                                                self.hyperstack.voxel_size))
                     result_buffers.append(result)
 
@@ -511,7 +535,7 @@ class Tracer():
                                                          self.threshold,
                                                          self._speed,
                                                          self.quality,
-                                                         self.force_redo,
+                                                         self.overwrite_cache,
                                                          self.hyperstack.voxel_size))
 
             self.neurons = result_buffers
@@ -555,8 +579,11 @@ class Tracer():
                 volume = volume * mask
                 intensities[ii] = np.max(sitk.GetArrayFromImage(volume))
 
-            neuron.intensities = intensities
-            np.save(neuron.i_fname, intensities)
+            times = np.linspace(0, frames * hyperstack.period, num=frames)
+
+            neuron.intensities = np.array([intensities, times])
+            print(neuron.intensities.shape)
+            np.save(neuron.i_fname, neuron.intensities)
 
         return neuron
 
@@ -568,14 +595,14 @@ class Tracer():
                 result_buffers = []
                 for neuron in self.neurons:
                     result = pool.apply_async(self._get_voltage_single,
-                                              (neuron, hyperstack, self.force_redo))
+                                              (neuron, hyperstack, self.overwrite_cache))
                     result_buffers.append(result)
 
                 results = [result.get() for result in result_buffers]
         else:
             results = []
             for neuron in self.neurons:
-                results.append(self._get_voltage_single(neuron, hyperstack, self.force_redo))
+                results.append(self._get_voltage_single(neuron, hyperstack, self.overwrite_cache))
 
         self.neurons = results
 

@@ -2,12 +2,14 @@ import math
 from tqdm import tqdm
 import numpy as np
 import skfmm
-import msfm
+
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage.morphology import binary_dilation
 from skimage.morphology import skeletonize_3d
-from .soma import Soma
-from .swc import SWC
+
+import rivunetpy.msfm as msfm
+from rivunetpy.soma import Soma
+from rivunetpy.swc import SWC
 
 
 class Tracer(object):

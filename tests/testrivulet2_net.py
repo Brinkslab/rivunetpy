@@ -5,7 +5,7 @@ import time
 if __name__ == '__main__':
     start_time = time.time()
 
-    filename = r'data\dataset_s0_c9_4D_20dB_SNR.tif'
+    filename = r'data\dataset_s0_c9_4D_20dB_SNR_small.tif'
 
     tracer = Tracer()
     tracer.set_file(filename)
