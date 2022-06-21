@@ -26,12 +26,14 @@ from contextlib import redirect_stdout
 def check_long_ext(file_to_check, ext):
     return file_to_check.split(os.extsep, 1)[-1] == ext.split(os.extsep, 1)[-1]
 
+
 def convert_hyperstack_to_4D_image(img: sitk.Image, z_depth, frames):
     X_size, Y_size, stacks = img.GetSize()
     return sitk.GetImageFromArray(
         np.reshape(
             sitk.GetArrayFromImage(img), (frames, z_depth, X_size, Y_size)
         ), isVector=False)
+
 
 def tifffile_read_metadata(file):
     with tifffile.TiffFile(file) as tif:
@@ -45,7 +47,6 @@ def tifffile_read_metadata(file):
 
 
 def sitk_read_metadata(img_or_file, key=None):
-
     if isinstance(img_or_file, str):
         file_reader = sitk.ImageFileReader()
         file_reader.SetFileName(img_or_file)
@@ -58,7 +59,7 @@ def sitk_read_metadata(img_or_file, key=None):
         img_or_reader = img_or_file
 
     else:
-        raise ValueError('Could not read metadata from object. Input should be either a filename to read from \n' 
+        raise ValueError('Could not read metadata from object. Input should be either a filename to read from \n'
                          f'or an SimpleITK.Image object. Input object is of unusable type: {type(img_or_file)}.')
 
     metadatakeys = img_or_reader.GetMetaDataKeys()
@@ -83,6 +84,7 @@ def sitk_read_metadata(img_or_file, key=None):
 
     return all_info
 
+
 class HyperStack(Image):
 
     def __init__(self, *args, **kwargs):
@@ -95,18 +97,17 @@ class HyperStack(Image):
 
         super().__init__(*args, **kwargs)
 
-
     def _add_metadata(self, metadata_dict):
 
         is_hyperstack = metadata_dict.get('hyperstack')
 
-        x_voxel_size = metadata_dict['x_voxel_size'] # um/px
-        y_voxel_size = metadata_dict['y_voxel_size'] # um/px
+        x_voxel_size = metadata_dict['x_voxel_size']  # um/px
+        y_voxel_size = metadata_dict['y_voxel_size']  # um/px
 
         z_voxel_size = metadata_dict.get('spacing')
         z_voxel_unit = metadata_dict.get('unit')
         MU_STRING = r'$\mathrm{\mu m}$'
-        voxel_unit_str = MU_STRING # um, for plotting
+        voxel_unit_str = MU_STRING  # um, for plotting
 
         period = metadata_dict.get('finterval')
         period_unit = metadata_dict.get('tunit')
@@ -137,7 +138,7 @@ class HyperStack(Image):
                               'Please use a tool such as ImageJ to specify the voxel size.')
         else:
             warnings.warn('HyperStack: Warning, no voxel size found, using pixel units for instead.')
-            voxel_unit_str = 'px' # Override
+            voxel_unit_str = 'px'  # Override
             z_voxel_size = 1
 
             # Also convert XY voxel sizes back to pixel units
@@ -182,7 +183,7 @@ class HyperStack(Image):
         print('Imported hyperstack with metadata:\n'
               f'\tVoxel size: {self.voxel_size[0]:.4f} {vx_u} * {self.voxel_size[1]:.4f} {vx_u} '
               f'* {self.voxel_size[2]:.4f} {vx_u}\n'
-              f'\tImage size: {self.x_size} px * {self.y_size} px * {self.z_size} px \n' 
+              f'\tImage size: {self.x_size} px * {self.y_size} px * {self.z_size} px \n'
               f'\tWith {self.frames} frames.')
 
     @classmethod
@@ -206,14 +207,14 @@ class HyperStack(Image):
         frames = metadata_dict.get('frames')
 
         if z_depth is None or frames is None:
-            raise IOError('Error while loading hyperstack. Metadata was found but could not by interpreted. \n' 
+            raise IOError('Error while loading hyperstack. Metadata was found but could not by interpreted. \n'
                           'Try editing the orignal image in ImageJ.')
 
         z_depth = int(z_depth)
         frames = int(frames)
 
-        assert metadata_dict.get('hyperstack') == 'true', ('Error while loading hyperstack. Image is not flagged as \n' 
-                                                      'hyperstack. Try editing it in ImageJ.')
+        assert metadata_dict.get('hyperstack') == 'true', ('Error while loading hyperstack. Image is not flagged as \n'
+                                                           'hyperstack. Try editing it in ImageJ.')
         if metadata_only:
             hyperstack = cls()
         else:
@@ -240,10 +241,10 @@ class HyperStack(Image):
         elif mode == 'AVG':
             function = np.mean
         else:
-            raise ValueError(f'Unknown projection mode: {mode}. Please use either MAX or AVG for maximum intensity \n' 
+            raise ValueError(f'Unknown projection mode: {mode}. Please use either MAX or AVG for maximum intensity \n'
                              'and average intensity projection resp.')
 
-        X_size, Y_size, _, _  = self.GetSize()
+        X_size, Y_size, _, _ = self.GetSize()
 
         # Project to 3D image to get geometry
         T_project = sitk.GetArrayFromImage(self)
@@ -251,13 +252,14 @@ class HyperStack(Image):
 
         return sitk.GetImageFromArray(T_project, isVector=False)
 
+
 class Tracer():
     # TODO: Clean up new class-based methods
     def __init__(self):
         self.filename = None
         self.out = None
         self.threshold = None
-        self.tolerance = 0.2
+        self.tolerance = 0.15
         self.overwrite_cache = False
         self.quality = False
         self.asynchronous = True
@@ -337,7 +339,23 @@ class Tracer():
         self.use_hyperstack = use_hyperstack
         return self
 
-    def _plot(self):
+    def _plot(self, titles=False):
+
+        tu_delft_colors = ['#0C2340',
+                           '#00B8C8',
+                           '#0076C2',
+                           '#6F1D77',
+                           '#EF60A3',
+                           '#A50034',
+                           '#E03C31',
+                           '#EC6842',
+                           '#FFB81C',
+                           '#6CC24A',
+                           '#009B77', ]
+
+        # Set the default color cycle
+        import matplotlib
+        matplotlib.rcParams['axes.prop_cycle'] = matplotlib.cycler(color=tu_delft_colors)
 
         rc = {"font.family": "serif",
               "mathtext.fontset": "stix"}
@@ -350,13 +368,8 @@ class Tracer():
         ax3 = plt.subplot(212)
         # fig, ax = plt.subplots(1, 2)
 
-
-
-
-
         plot_segmentation(self.neurons, ax=ax1)
 
-        ax1.set_title('Segmentation')
         ax1.set_xlabel('X [px]')
         ax1.set_ylabel('Y [px]')
 
@@ -364,11 +377,8 @@ class Tracer():
         for neuron in self.neurons:
             swcs.append(neuron.swc)
 
-        ax2.set_title('Structure')
         plot_swcs(swcs, ax=ax2, units=self.hyperstack.voxel_unit_str)
 
-
-        ax3.set_title('Dynamics')
         all_intensities = []
         for neuron in self.neurons:
             all_intensities.append(neuron.intensities[0])
@@ -387,18 +397,22 @@ class Tracer():
         # for minor ticks
         ax3.set_yticks([], minor=True)
 
-        #ax3.plot(tt, neuron.intensities, label=neuron.num)
-
+        # ax3.plot(tt, neuron.intensities, label=neuron.num)
 
         ax3.set_xlabel(r'$t \;\mathrm{ [' + self.hyperstack.period_unit_str + r'}]$')
         ax3.set_ylabel('Neuron')
         # plt.legend(loc='best')
 
+        if titles:
+            ax1.set_title('Segmentation')
+            ax2.set_title('Structure')
+            ax3.set_title('Dynamics')
+
         ax1.text(0.05, 0.95, 'A', transform=ax1.transAxes,
-                 fontsize=None, fontweight='bold', va='top', color='white',)
+                 fontsize=None, fontweight='bold', va='top', color='white', )
         ax2.text(0.05, 0.95, 'B', transform=ax2.transAxes,
                  fontsize=None, fontweight='bold', va='top')
-        ax3.text(0.025, 0.95, 'C', transform=ax3.transAxes,
+        ax3.text(0.015, 0.95, 'C', transform=ax3.transAxes,
                  fontsize=None, fontweight='bold', va='top', color='white')
 
         fig.show()
@@ -549,7 +563,7 @@ class Tracer():
             print(f'Neuron ({neuron.num})\t --Loaded trace from disk')
 
         else:
-            soma_centroid = np.divide(neuron.swc._data[0, 2:5], hyperstack.voxel_size) # XYZ of soma in cleaned SWC
+            soma_centroid = np.divide(neuron.swc._data[0, 2:5], hyperstack.voxel_size)  # XYZ of soma in cleaned SWC
 
             # TODO: Nice implementation for scaling section radii based on voxel size
             # This would likely involve figuring out where the line spanning from childID to parentID is pointing to
@@ -569,9 +583,6 @@ class Tracer():
             bin_dil_filt.SetKernelType(sitk.sitkBall)
             mask = bin_dil_filt.Execute(mask)
 
-            # plt.imshow(flatten(mask))
-            # plt.show()
-
             intensities = np.zeros(frames)
 
             for ii in range(frames):
@@ -582,7 +593,6 @@ class Tracer():
             times = np.linspace(0, frames * hyperstack.period, num=frames)
 
             neuron.intensities = np.array([intensities, times])
-            print(neuron.intensities.shape)
             np.save(neuron.i_fname, neuron.intensities)
 
         return neuron
@@ -605,7 +615,6 @@ class Tracer():
                 results.append(self._get_voltage_single(neuron, hyperstack, self.overwrite_cache))
 
         self.neurons = results
-
 
     def execute(self):
 
@@ -632,4 +641,3 @@ class Tracer():
         self._plot()
 
         return self.neurons
-

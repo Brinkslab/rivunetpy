@@ -321,7 +321,7 @@ class NeuronSegmentor:
         neurons: Images of the individual neurons.
     """
 
-    def __init__(self, img: Image, threshold: Union[int, float] = None, tolerance=0.2):
+    def __init__(self, img: Image, threshold: Union[int, float] = None, tolerance=0.15):
         """Segment an image of multiple neurons.
 
         A progress bar is shown to indicate the approximate progress.
