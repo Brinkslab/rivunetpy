@@ -3,7 +3,7 @@ from setuptools import setup, Extension
 from setuptools import find_packages
 import numpy as np
 
-VERSION = '0.3.2'
+VERSION = '0.4.0'
 classifiers = [
     # How mature is this project? Common values are
     #   3 - Alpha
@@ -43,7 +43,8 @@ REQS = ['numpy>=1.8.0',
         'matplotlib>=1.3.1',
         'nibabel>=2.1.0',
         'pyglet>=1.2.4',
-        'tqdm>4.11.2',]
+        'tqdm>4.11.2',
+        'tifffile']
 
 ext_modules = [
     Extension(
@@ -57,7 +58,7 @@ ext_modules = [
 config = {
     'description':
     'Rivunetpy: a powerful tool to automatically trace single neurons from 3D light microscopic images.',
-    'author': 'RivuletStuio',
+    'author': 'BrinksLab',
     'url': 'https://github.com/twhoekstra/rivuletpy',
     'author_email': 'lsqshr@gmail.com, zdhpeter1991@gmail.com',
     'version': VERSION,
