@@ -72,6 +72,7 @@ class R2Tracer(Tracer):
                 'non stop' if self._non_stop else 'standard stopping criteria'))
         swc = self._iterative_backtrack()
 
+        print(len(swc._data))
 
         if self._clean:
             swc.prune()

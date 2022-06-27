@@ -31,17 +31,25 @@ def convert_hyperstack_to_4D_image(img: sitk.Image, z_depth, frames):
     X_size, Y_size, stacks = img.GetSize()
     return sitk.GetImageFromArray(
         np.reshape(
-            sitk.GetArrayFromImage(img), (frames, z_depth, X_size, Y_size)
+            sitk.GetArrayFromImage(img), (frames, z_depth, Y_size, X_size)
         ), isVector=False)
 
 
 def tifffile_read_metadata(file):
     with tifffile.TiffFile(file) as tif:
-        x_resolution, factor = tif.pages[0].tags['XResolution'].value
-        x_voxel_size = factor / x_resolution
+        data = tif.pages[0].tags.get('XResolution')
+        if data is not None:
+            x_resolution, factor = data.value
+            x_voxel_size = factor / x_resolution
+        else:
+            x_voxel_size = None
 
-        y_resolution, factor = tif.pages[0].tags['YResolution'].value
-        y_voxel_size = factor / y_resolution
+        data = tif.pages[0].tags.get('YResolution')
+        if data is not None:
+            y_resolution, factor = data.value
+            y_voxel_size = factor / y_resolution
+        else:
+            y_voxel_size = None
 
     return x_voxel_size, y_voxel_size
 
@@ -190,9 +198,11 @@ class HyperStack(Image):
     def from_file(cls, fname, metadata_only=False):
         # Hacky bootstrapping to read the file
         if not metadata_only:
-            sitk.ProcessObject_SetGlobalWarningDisplay(False)
+            # sitk.ProcessObject_SetGlobalWarningDisplay(False)
             img = sitk.ReadImage(fname)
-            sitk.ProcessObject_SetGlobalWarningDisplay(True)
+            # img = sitk.Cast(img, sitk.sitkUInt16)
+
+            # sitk.ProcessObject_SetGlobalWarningDisplay(True)
 
             metadata_dict = sitk_read_metadata(img, key='ImageDescription')
         else:
@@ -391,7 +401,7 @@ class Tracer():
                         extent=[0, self.hyperstack.frames * self.hyperstack.period, 1, len(self.neurons) + 1])
         cbar = fig.colorbar(im)
         cbar.ax.get_yaxis().labelpad = 15
-        cbar.ax.set_ylabel(r'$I_{max}\;\mathrm{ [1]}$ ', rotation=270)
+        cbar.ax.set_ylabel(r'$I_{avg}\;\mathrm{ [1]}$ ', rotation=270)
 
         ax3.set_yticks([])
         # for minor ticks
@@ -471,7 +481,7 @@ class Tracer():
         starttime = time.time()
         img = neuron.img
         neuron.swc_fname = '{}{}'.format(neuron.img_fname.split(RIVULET_2_TREE_IMG_EXT)[0], RIVULET_2_TREE_SWC_EXT)
-
+        print(neuron.swc_fname)
         if os.path.exists(neuron.swc_fname) and not force_retrace:
             swc_mat = loadswc(neuron.swc_fname)
             swc = SWC()
@@ -588,7 +598,7 @@ class Tracer():
             for ii in range(frames):
                 volume = hyperstack[:, :, :, ii]
                 volume = volume * mask
-                intensities[ii] = np.max(sitk.GetArrayFromImage(volume))
+                intensities[ii] = np.mean(sitk.GetArrayFromImage(volume))
 
             times = np.linspace(0, frames * hyperstack.period, num=frames)
 
