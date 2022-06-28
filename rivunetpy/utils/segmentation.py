@@ -34,6 +34,9 @@ from rivunetpy.utils.cells import Neuron
 from rivunetpy.utils.plottools import flatten
 from rivunetpy.utils.metrics import euclidean_distance
 
+########## 3D Setting for performance ##########
+NUM_SCALES = 5
+DOWNSCALE_THRESHOLD = 10  # soma scale at which to sacrifice quality for speed by reducing image size
 
 def downsample_img(img, rescale_factor):
     # https://stackoverflow.com/questions/48065117/simpleitk-resize-images?answertab=trending#tab-top
@@ -42,11 +45,14 @@ def downsample_img(img, rescale_factor):
     reference_physical_size[:] = [(sz - 1) * spc if sz * spc > mx else mx for sz, spc, mx in
                                   zip(img.GetSize(), img.GetSpacing(), reference_physical_size)]
 
+
     reference_origin = img.GetOrigin()
     reference_direction = img.GetDirection()
 
     reference_size = [round(sz * rescale_factor) for sz in img.GetSize()]
+    reference_size[2] = img.GetSize()[2] # Keep Z identical
     reference_spacing = [phys_sz / (sz - 1) for sz, phys_sz in zip(reference_size, reference_physical_size)]
+    reference_spacing[2] = img.GetSpacing()[2]
 
     reference_image = sitk.Image(reference_size, img.GetPixelIDValue())
     reference_image.SetOrigin(reference_origin)
@@ -229,6 +235,8 @@ def find_max_scale(binary: Image) -> int:
     distance_transform.SetSquaredDistance(False)
     distance_img = distance_transform.Execute(binary)
 
+
+
     max_filter = sitk.MinimumMaximumImageFilter()
     _ = max_filter.Execute(distance_img)
 
@@ -287,9 +295,6 @@ def get_seeds(img: Image, binary: Image, scale: int, tolerance: float = 0.20, ex
         np.ndarray: A ``numpy`` array of points, each lying on one blob in a location that is a-specific to
           the geometry of that blob.
     """
-    ########## 3D Setting for performance ##########
-    NUM_SCALES = 5
-    DOWNSCALE_THRESHOLD = 20  # soma scale at which to sacrifice quality for speed by reducing image size
 
     if img.GetDimension() == 3:
 
@@ -300,10 +305,18 @@ def get_seeds(img: Image, binary: Image, scale: int, tolerance: float = 0.20, ex
         if scale > DOWNSCALE_THRESHOLD:
             rescale_factor = DOWNSCALE_THRESHOLD / scale
             scales = (scales * rescale_factor).astype(int)
+
             img = downsample_img(img, rescale_factor)
+            binary = downsample_img(binary, rescale_factor)
+
         else:
             scales = scales.astype(int)
             rescale_factor = 1
+
+        # Morphological closing
+        clos_filt = sitk.BinaryMorphologicalClosingImageFilter()
+        clos_filt.SetKernelRadius(int(scale))
+        binary = clos_filt.Execute(binary)
 
         blobs = hessian_filter(img, scales, scaled_to_eval=True, dimension=0, parallel=False)
 
@@ -322,6 +335,8 @@ def get_seeds(img: Image, binary: Image, scale: int, tolerance: float = 0.20, ex
 
         tolerance = threshold_filter.GetThreshold()
         blobs = blobs > tolerance
+
+        binary.SetSpacing([1, 1, 1])
 
         recon_filter = sitk.BinaryReconstructionByDilationImageFilter()
         recon = recon_filter.Execute(blobs, binary)
@@ -358,7 +373,8 @@ def get_seeds(img: Image, binary: Image, scale: int, tolerance: float = 0.20, ex
 
         seeds = []
         for label in stats.GetLabels():
-            cent = np.array(stats.GetCentroid(label)) / rescale_factor
+            cent = np.array(stats.GetCentroid(label))
+            cent[:2] = cent[:2] / rescale_factor #forgo rescaling Z
             cent = cent.astype(int).tolist()
             seeds.append(tuple(cent))
 
@@ -430,7 +446,6 @@ class NeuronSegmentor:
         else:
             self.binary = self.img > self.threshold
 
-        self.binary_closed = None
         self.blobs = None
         self.components = None
 
@@ -478,25 +493,21 @@ class NeuronSegmentor:
 
         distance_transform = sitk.SignedMaurerDistanceMapImageFilter()
         # distance_transform.SetUseImageSpacing(False)
-        distance_transform.SetInsideIsPositive(True)
+        # distance_transform.SetInsideIsPositive(True)
         # distance_transform.SetBackgroundValue(1)
-        distance_transform.SetSquaredDistance(False)
+        distance_transform.SetSquaredDistance(True)
         distance_img = distance_transform.Execute(flat_bin)
 
         max_filter = sitk.MinimumMaximumImageFilter()
         _ = max_filter.Execute(distance_img)
 
-        scale_guess_2D = int(max_filter.GetMaximum())
+        scale_guess_2D = int(np.sqrt(abs(max_filter.GetMinimum())))
 
-        clos_filt = sitk.BinaryMorphologicalClosingImageFilter()
 
-        clos_filt.SetKernelRadius(int(scale_guess_2D))
 
-        self.binary_closed = clos_filt.Execute(self.binary)
+        return scale_guess_2D
 
-        scale_guess_3D = find_max_scale(self.binary_closed)
 
-        return max(scale_guess_3D, scale_guess_2D)
 
     def __find_soma_seeds(self) -> np.ndarray:
         """Finds unique points on the soma that can act as seeds for segmentation.
@@ -508,7 +519,7 @@ class NeuronSegmentor:
         Returns:
             np.ndarray: A ``numpy`` array containing the locations of the somata in pixel units.
         """
-        seeds = get_seeds(self.img, self.binary_closed, self.soma_scale, tolerance=self.seed_tolerance, exclude_border_dist=self.soma_scale)
+        seeds = get_seeds(self.img, self.binary, self.soma_scale, tolerance=self.seed_tolerance, exclude_border_dist=self.soma_scale)
 
         if len(seeds) == 0:
             raise RuntimeError('Could not find any seeds. Please check your settings.')
@@ -561,6 +572,7 @@ class NeuronSegmentor:
         for point in self.soma_seeds.tolist():
             idx = marker.TransformPhysicalPointToIndex(point)
             marker[idx] = 1
+
 
         marker_2 = copy.copy(marker)
 
@@ -647,7 +659,7 @@ class NeuronSegmentor:
         else:
             scales = np.arange(2, neurite_scale)
 
-        print(f'\t(D) Frangi scales = {scales}')
+        print(f'\t(D): Frangi scales = {scales}')
 
         frangi = hessian_filter(self.img, scales, dimension=1, scaled_to_eval=True, normalized=False, parallel=False)
 

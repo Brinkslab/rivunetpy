@@ -481,7 +481,7 @@ class Tracer():
         starttime = time.time()
         img = neuron.img
         neuron.swc_fname = '{}{}'.format(neuron.img_fname.split(RIVULET_2_TREE_IMG_EXT)[0], RIVULET_2_TREE_SWC_EXT)
-        print(neuron.swc_fname)
+
         if os.path.exists(neuron.swc_fname) and not force_retrace:
             swc_mat = loadswc(neuron.swc_fname)
             swc = SWC()
@@ -500,9 +500,13 @@ class Tracer():
             img = np.moveaxis(img, 0, -1)
             img = np.swapaxes(img, 0, 1)
 
-            img, crop_region = crop(img, reg_thresh)  # Crop by default
-            print(f'Neuron ({neuron.num})\t --Tracing neuron of shape {img.shape} '
-                  f'with a threshold of {reg_thresh}')
+            try:
+                img, crop_region = crop(img, reg_thresh)  # Crop by default
+                print(f'Neuron ({neuron.num})\t --Tracing neuron of shape {img.shape} '
+                      f'with a threshold of {reg_thresh}')
+            except ValueError:
+                print(f'Neuron ({neuron.num})\t --Invalid image detected. Skipping...')
+                return neuron
 
             # Run rivulet2 for the first time
             skeletonize = False
@@ -524,7 +528,12 @@ class Tracer():
                     swc_arr[i, 5] = estimate_radius(swc_arr[i, 2:5], img > reg_thresh)
                 swc._data = swc_arr
 
+            if np.ndim(swc._data) == 1:
+                print(f'Neuron ({neuron.num})\t --Invalid image detected. Skipping...')
+                return neuron
+
             swc.clean()
+
 
             swc.apply_soma_TypeID(soma)
 

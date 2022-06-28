@@ -23,7 +23,7 @@ if __name__ == '__main__':
 
     img = loadtiff3d(filename, out='SITK') # Original Image
 
-    neurons = NeuronSegmentor(img, tolerance=0.5)
+    neurons = NeuronSegmentor(img, tolerance=0.15)
     neurons.plot_full_segmentation()
 
     neuron_images = neurons.neurons
