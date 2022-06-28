@@ -16,13 +16,14 @@ FORCE = True
 
 if __name__ == '__main__':
 
-    filename = r'H:\Duet\Visualizations\MicroscopeImages\488_3_10x_flobj_2msexp_Z_stack-small.tif'
+    # filename = r'H:\Duet\Visualizations\MicroscopeImages\488_3_10x_flobj_2msexp_Z_stack-small.tif'
+    filename = r"C:\Users\twh\Desktop\Z_stack_small.tif"
 
     # filename = 'H:\Duet\dataset_s0_c9_4D_20dB.tif'
 
     img = loadtiff3d(filename, out='SITK') # Original Image
 
-    neurons = NeuronSegmentor(img)
+    neurons = NeuronSegmentor(img, tolerance=0.5)
     neurons.plot_full_segmentation()
 
     neuron_images = neurons.neurons
