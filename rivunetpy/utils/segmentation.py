@@ -318,7 +318,7 @@ def get_seeds(img: Image,
             scales = scales.astype(int)
             rescale_factor = 1
 
-        blobs = hessian_filter(img, scales, scaled_to_eval=True, dimension=0, parallel=False)
+        blobs = hessian_filter(img, scales, scaled_to_eval=True, dimension=0, parallel=True)
 
         if exclude_border_dist is not None:
             rad = exclude_border_dist
@@ -696,7 +696,7 @@ class NeuronSegmentor:
 
         print(f'\t(D): Frangi scales = {scales}')
 
-        frangi = hessian_filter(self.img, scales, dimension=1, scaled_to_eval=True, normalized=False, parallel=False)
+        frangi = hessian_filter(self.img, scales, dimension=1, scaled_to_eval=True, normalized=False, parallel=True)
 
         frangi = sitk.RescaleIntensity(frangi, 0, 65535)  # 0-255
 
