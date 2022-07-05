@@ -430,7 +430,7 @@ class SWC(object):
                 ParentID = swc_dict[SampleID]
                 segment.append(swc_indices[SampleID])  # Segments consist of INDICES in original SWC
 
-            segment.append(swc_indices[ParentID])
+            # segment.append(swc_indices[ParentID])
             segment_maps.append(segment)
 
         return segment_maps
@@ -503,7 +503,7 @@ class SWC(object):
 
                 actor = vtkActor()
                 actor.SetMapper(mapper)
-                actor.GetProperty().SetLineWidth(4)
+                actor.GetProperty().SetLineWidth(2)
                 actor.GetProperty().SetColor(RGB_from_hex(color))
 
                 actors.append(actor)

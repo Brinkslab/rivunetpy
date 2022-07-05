@@ -268,6 +268,7 @@ class Tracer():
     def __init__(self):
         self.filename = None
         self.out = None
+        self.blur = None
         self.threshold = None
         self.tolerance = 0.15
         self.overwrite_cache = False
@@ -295,6 +296,10 @@ class Tracer():
 
     def set_threshold(self, threshold: int):
         self.threshold = threshold
+        return self
+
+    def set_blur(self, blur: float):
+        self.blur = blur
         return self
 
     def set_tolerance(self, tolerance: int):
@@ -460,7 +465,7 @@ class Tracer():
         if not os.path.exists(self.out):
             os.mkdir(self.out)
 
-        neuronsegmentor = NeuronSegmentor(spatial_data, threshold=self.threshold, tolerance=self.tolerance)
+        neuronsegmentor = NeuronSegmentor(spatial_data, threshold=self.threshold, tolerance=self.tolerance, blur=self.blur)
         self.neurons = neuronsegmentor.neurons
 
         # DEBUG PLOTS

@@ -5,8 +5,8 @@ from rivunetpy.utils.io import loadswc
 from rivunetpy.swc import SWC
 from rivunetpy.utils.plottools import volume_view
 
-SWC_FOLDER = r'H:\Duet\Duet\dataset_s0_c9'
-IMG = r'H:\Duet\Synthetic Data\dataset_s0_c9\MAX_dataset_s0_c9_structure.tif'
+SWC_FOLDER = r'C:\Users\twhoekstra\Desktop\SWCs'
+IMG = r'C:\Users\twhoekstra\Desktop\HyperStack_small-1.tif'
 
 
 if __name__ == '__main__':

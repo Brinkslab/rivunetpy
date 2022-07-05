@@ -282,7 +282,7 @@ def prune_points(points: list, radius: Union[int, float]) -> np.ndarray:
 def get_seeds(img: Image,
               binary: Image,
               scale: int,
-              tolerance: float = 0.20,
+              tolerance: float = 0.10,
               exclude_border_dist: int = None,
               watershed: bool = True) -> np.ndarray:
     """Gives the coordinates of blobs of a certain scale in a 3D stack.
@@ -330,10 +330,11 @@ def get_seeds(img: Image,
 
 
 
-
-        gaussian_filter = sitk.DiscreteGaussianImageFilter()
-        gaussian_filter.SetVariance(int(np.square(scale)))
-        blobs = gaussian_filter.Execute(blobs)
+        if not watershed:
+            gaussian_filter = sitk.DiscreteGaussianImageFilter()
+            gaussian_filter.SetMaximumKernelWidth(1000)
+            gaussian_filter.SetVariance(int(np.square(scale)))
+            blobs = gaussian_filter.Execute(blobs)
 
         maximum_filter = sitk.MinimumMaximumImageFilter()
         maximum_filter.Execute(blobs)
@@ -432,7 +433,7 @@ class NeuronSegmentor:
         neurons: Images of the individual neurons.
     """
 
-    def __init__(self, img: Image, threshold: Union[int, float] = None, tolerance=0.10, blur=None):
+    def __init__(self, img: Image, threshold: Union[int, float] = None, tolerance=0.10, blur=None, watershed=False):
         """Segment an image of multiple neurons.
 
         A progress bar is shown to indicate the approximate progress.
@@ -464,10 +465,12 @@ class NeuronSegmentor:
             raise ValueError(f'Threshold value should be of type int or float, instead got {type(threshold)}')
 
         self.blur = blur
+
         self.binary = self.img > self.threshold
 
         self.blobs = None
         self.components = None
+        self.watershed = watershed
 
         self.soma_scale = self.__find_soma_scale()
         print(f'\t(A): Found a soma scale of {self.soma_scale} px.')
@@ -539,12 +542,19 @@ class NeuronSegmentor:
         Returns:
             np.ndarray: A ``numpy`` array containing the locations of the somata in pixel units.
         """
-        seeds = get_seeds(sitk.DiscreteGaussian(self.img, int(np.square(self.blur))),
+
+        if self.blur:
+            img = sitk.DiscreteGaussian(self.img, int(np.square(self.blur)))
+        else:
+            img = self.img
+
+
+        seeds = get_seeds(img,
                           self.binary,
                           self.soma_scale,
                           tolerance=self.seed_tolerance,
                           exclude_border_dist=self.soma_scale,
-                          watershed=False)
+                          watershed=self.watershed)
 
         if len(seeds) == 0:
             raise RuntimeError('Could not find any seeds. Please check your settings.')

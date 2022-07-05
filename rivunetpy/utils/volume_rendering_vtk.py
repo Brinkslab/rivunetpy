@@ -99,7 +99,7 @@ def set_camera(ren, volume=None, pos=None, az=None, el=None, up=None, foc=None):
 
 
 
-def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False,opacity=0.10, inverse=True):
+def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False,opacity=0.25, inverse=True):
     importer = numpy2VTK(img, spacing)
 
     # Transfer Functions

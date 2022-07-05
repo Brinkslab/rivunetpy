@@ -6,12 +6,13 @@ if __name__ == '__main__':
     start_time = time.time()
 
     # filename = r'H:\Duet\Visualizations\MicroscopeImages\HyperStack.tif'
-    filename = r"C:\Users\twh\Desktop\HyperStack.tif"
+    filename = r"H:\Duet\Synthetic Data\dataset_s0_c9\dataset_s0_c9_4D_20dB.tif"
 
     tracer = Tracer()
     tracer.set_file(filename)
-    tracer.asynchronous_off()
-    tracer.set_tolerance(0.10)
+    tracer.set_blur(6.5)
+    tracer.set_output_dir(r'C:\Users\twhoekstra\Desktop\dataset_s0_s9')
+    tracer.set_tolerance(0.05)
     neurons = tracer.execute()
 
     print(f'\n\nDone in {time.time() - start_time} s')
