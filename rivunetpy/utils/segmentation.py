@@ -279,7 +279,12 @@ def prune_points(points: list, radius: Union[int, float]) -> np.ndarray:
     return valid_points
 
 
-def get_seeds(img: Image, binary: Image, scale: int, tolerance: float = 0.20, exclude_border_dist: int = None) -> np.ndarray:
+def get_seeds(img: Image,
+              binary: Image,
+              scale: int,
+              tolerance: float = 0.20,
+              exclude_border_dist: int = None,
+              watershed: bool = True) -> np.ndarray:
     """Gives the coordinates of blobs of a certain scale in a 3D stack.
 
     Retrieves the points at which blobs of a specified scale lie in a 3D stack image. Each blob is assigned strictly
@@ -313,11 +318,6 @@ def get_seeds(img: Image, binary: Image, scale: int, tolerance: float = 0.20, ex
             scales = scales.astype(int)
             rescale_factor = 1
 
-        # Morphological closing
-        clos_filt = sitk.BinaryMorphologicalClosingImageFilter()
-        clos_filt.SetKernelRadius(int(scale))
-        binary = clos_filt.Execute(binary)
-
         blobs = hessian_filter(img, scales, scaled_to_eval=True, dimension=0, parallel=False)
 
         if exclude_border_dist is not None:
@@ -328,48 +328,70 @@ def get_seeds(img: Image, binary: Image, scale: int, tolerance: float = 0.20, ex
             blobs[:, :rad, :] = 0
             blobs[:, -rad:, :] = 0
 
-        threshold_filter = sitk.OtsuThresholdImageFilter()
+
+
+
+        gaussian_filter = sitk.DiscreteGaussianImageFilter()
+        gaussian_filter.SetVariance(int(np.square(scale)))
+        blobs = gaussian_filter.Execute(blobs)
+
+        maximum_filter = sitk.MinimumMaximumImageFilter()
+        maximum_filter.Execute(blobs)
+        maximum = maximum_filter.GetMaximum()
+
+        blobs = blobs * sitk.Cast((blobs > maximum * 0.5), sitk.sitkFloat32)
+
+        threshold_filter = sitk.MaximumEntropyThresholdImageFilter()
         threshold_filter.SetInsideValue(1)
         threshold_filter.SetOutsideValue(0)
         threshold_filter.Execute(blobs)
 
         tolerance = threshold_filter.GetThreshold()
+
+
+
         blobs = blobs > tolerance
 
+        # Morphological opening
+        # open_filt = sitk.BinaryMorphologicalOpeningImageFilter()
+        # open_filt.SetKernelRadius(int(scale))
+        # binary = open_filt.Execute(binary)
+
         binary.SetSpacing([1, 1, 1])
-
-        recon_filter = sitk.BinaryReconstructionByDilationImageFilter()
-        recon = recon_filter.Execute(blobs, binary)
-
-        d = sitk.SignedMaurerDistanceMap(recon, insideIsPositive=False, squaredDistance=False, useImageSpacing=False)
-
-        ws = sitk.MorphologicalWatershed(d, markWatershedLine=False, level=1)
-
-        ws = sitk.Mask(ws, sitk.Cast(recon, ws.GetPixelID()))
-
-
-        # blobs = sitk.Cast(img, sitk.sitkFloat32) * blobs # Weigh blobs by pixel intensity at loc
-
-        # gaussian_filter = sitk.DiscreteGaussianImageFilter()
-        # gaussian_filter.SetVariance(int(np.square(1)))
-        # blobs = gaussian_filter.Execute(blobs)
-
-
-        #
-        # blobs = sitk.RescaleIntensity(blobs, 0, 65535)  # 0-65535
-        # blobs = sitk.Cast(blobs, sitk.sitkUInt16)
-
-        # plt.imshow(flatten(blobs))
-        # plt.show()
-
-        # label_image = sitk.ConnectedComponent(recon)
-        stats = sitk.LabelIntensityStatisticsImageFilter()
-
-        plt.imshow(flatten(ws), cmap='nipy_spectral')
-        plt.show()
-
         img.SetSpacing([1, 1, 1])
-        stats.Execute(ws, img)
+
+
+        stats = sitk.LabelIntensityStatisticsImageFilter()
+        if watershed:
+
+            recon_filter = sitk.BinaryReconstructionByDilationImageFilter()
+            recon = recon_filter.Execute(blobs, binary)
+
+            d = sitk.SignedMaurerDistanceMap(recon, insideIsPositive=False, squaredDistance=False, useImageSpacing=False)
+
+            ws = sitk.MorphologicalWatershed(d, markWatershedLine=False, level=1)
+
+            ws = sitk.Mask(ws, sitk.Cast(recon, ws.GetPixelID()))
+
+            # blobs = sitk.Cast(img, sitk.sitkFloat32) * blobs # Weigh blobs by pixel intensity at loc
+
+            # gaussian_filter = sitk.DiscreteGaussianImageFilter()
+            # gaussian_filter.SetVariance(int(np.square(1)))
+            # blobs = gaussian_filter.Execute(blobs)
+
+
+            #
+            # blobs = sitk.RescaleIntensity(blobs, 0, 65535)  # 0-65535
+            # blobs = sitk.Cast(blobs, sitk.sitkUInt16)
+
+
+            # label_image = sitk.ConnectedComponent(recon)
+
+            stats.Execute(ws, img)
+
+        else:
+            label_image = sitk.ConnectedComponent(blobs)
+            stats.Execute(label_image, img)
 
         seeds = []
         for label in stats.GetLabels():
@@ -441,10 +463,8 @@ class NeuronSegmentor:
         else:
             raise ValueError(f'Threshold value should be of type int or float, instead got {type(threshold)}')
 
-        if blur:
-            self.binary = sitk.DiscreteGaussian(self.img, blur) > self.threshold
-        else:
-            self.binary = self.img > self.threshold
+        self.blur = blur
+        self.binary = self.img > self.threshold
 
         self.blobs = None
         self.components = None
@@ -519,7 +539,12 @@ class NeuronSegmentor:
         Returns:
             np.ndarray: A ``numpy`` array containing the locations of the somata in pixel units.
         """
-        seeds = get_seeds(self.img, self.binary, self.soma_scale, tolerance=self.seed_tolerance, exclude_border_dist=self.soma_scale)
+        seeds = get_seeds(sitk.DiscreteGaussian(self.img, int(np.square(self.blur))),
+                          self.binary,
+                          self.soma_scale,
+                          tolerance=self.seed_tolerance,
+                          exclude_border_dist=self.soma_scale,
+                          watershed=False)
 
         if len(seeds) == 0:
             raise RuntimeError('Could not find any seeds. Please check your settings.')
@@ -837,6 +862,7 @@ class NeuronSegmentor:
         y = soma_seeds[:, 1]
         plt.scatter(x, y, color='royalblue', marker='x')
         plt.axis('image')
+        plt.axis('off')
 
     def __plot_neuron_images(self):
         prop_cycle = plt.rcParams['axes.prop_cycle']
@@ -927,61 +953,49 @@ class NeuronSegmentor:
         import matplotlib.pyplot as plt
         from matplotlib.colors import ListedColormap
 
-        plt.style.use('dark_background')
+        # plt.style.use('dark_background')
 
-        fig = plt.figure(figsize=(15, 7), dpi=400)
+        fig = plt.figure(figsize=(12, 7), dpi=400)
 
-        ax = fig.add_subplot(2, 4, 1)
+        ax = fig.add_subplot(2, 3, 1)
         plt.title(f'Original image, soma size: {self.soma_scale} px')
-        plt.imshow(flatten(self.img), cmap='gray', interpolation='none')
+        plt.imshow(flatten(self.img), cmap='gray')
         if colorbar:
             plt.colorbar()
         plt.axis('off')
 
-        ax = fig.add_subplot(2, 4, 2)
+        ax = fig.add_subplot(2, 3, 2)
         plt.title('Initial binary pass')
-        plt.imshow(flatten(self.binary), cmap='gray', interpolation='none')
+        plt.imshow(flatten(self.binary), cmap='gray')
         if colorbar:
             plt.colorbar()
         plt.axis('off')
 
-        ax = fig.add_subplot(2, 4, 3)
+        ax = fig.add_subplot(2, 3, 3)
         self.__plot_seeds()
         plt.title(f'{len(self.soma_seeds)} Unique seeds')
         if colorbar:
             plt.colorbar()
         # plt.axis('square')
-        # plt.axis('off')
-
-        ax = fig.add_subplot(2, 4, 4)
-        # plt.title('Soma masked off')
-        # plt.imshow(flatten(self.__soma_removed), cmap='gray', interpolation='none')
-        # if colorbar:
-        #     plt.colorbar()
         plt.axis('off')
 
-        ax = fig.add_subplot(2, 4, 5)
+
+        ax = fig.add_subplot(2, 3, 4)
         plt.title(f'Frangi. Neurite size: {self.neurite_scale} px')
-        plt.imshow(flatten(self.__neurite_frangi), cmap='gray', interpolation='none')
+        plt.imshow(flatten(self.__neurite_frangi), cmap='gray')
         if colorbar:
             plt.colorbar()
         plt.axis('off')
 
-        ax = fig.add_subplot(2, 4, 6)
-        plt.title('Composite image')
-        plt.imshow(flatten(self.__composite_image), cmap='gray', interpolation='none')
+        ax = fig.add_subplot(2, 3, 5)
+        plt.title('Regions')
+        plt.imshow(flatten(self.regions), cmap='nipy_spectral', interpolation='none')
         if colorbar:
             plt.colorbar()
         plt.axis('off')
 
-        ax = fig.add_subplot(2, 4, 7)
-        plt.title(f'Final regions')
-        plt.imshow(flatten(self.components), cmap='nipy_spectral', interpolation='none')
-        if colorbar:
-            plt.colorbar()
-        plt.axis('off')
 
-        ax = fig.add_subplot(2, 4, 8)
+        ax = fig.add_subplot(2, 3, 6)
         self.__plot_neuron_images()
         plt.title(f'{len(self.__region_labels)} Labeled neurons')
         plt.axis('off')

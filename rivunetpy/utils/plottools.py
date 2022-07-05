@@ -17,6 +17,24 @@ from rivunetpy.utils.cells import Neuron
 from rivunetpy.utils.volume_rendering_vtk import (volumeRender, vtk_create_renderer, set_camera,
                                                   vtk_show, vtk_basic, get_tf)
 
+tu_delft_colors = ['#0C2340',
+                   '#00B8C8',
+                   '#0076C2',
+                   '#6F1D77',
+                   '#EF60A3',
+                   '#A50034',
+                   '#E03C31',
+                   '#EC6842',
+                   '#FFB81C',
+                   '#6CC24A',
+                   '#009B77', ]
+
+# Set the default color cycle
+import matplotlib
+
+matplotlib.rcParams['axes.prop_cycle'] = matplotlib.cycler(color=tu_delft_colors)
+
+
 def flatten(image, as_sitk=False, whitebackground=False):
 
     if type(image) is sitk.Image:
@@ -276,18 +294,17 @@ def get_actors_from_args(args, labeled=False):
         if type(arg) is sitk.Image:
             img = arg
             data = sitk.GetArrayFromImage(img)
-            # TODO: Need to flip either image or SWC. SWC is probably the wisest here.
-            #data = np.flip(data, axis=1)
-            data = np.transpose(data, axes=[2, 1, 0])
             tf = get_tf(data)
 
             actor = volumeRender(data, tf=tf, spacing=img.GetSpacing(), labeled=labeled)
 
-        if type(arg) is SWC:
+        elif type(arg) is SWC:
             swc = arg
             actor = swc.as_actor(color=color, centered=False)
             color = next(colors)
 
+        else:
+            raise TypeError(f'Wrong type {type(arg)}, use SimpleITK or rivunetpy.swc.SWC instead')
         actor_list.append(actor)
 
     return actor_list

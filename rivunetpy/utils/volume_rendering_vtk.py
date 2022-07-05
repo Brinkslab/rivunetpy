@@ -99,7 +99,7 @@ def set_camera(ren, volume=None, pos=None, az=None, el=None, up=None, foc=None):
 
 
 
-def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False,opacity=0.10):
+def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False,opacity=0.10, inverse=True):
     importer = numpy2VTK(img, spacing)
 
     # Transfer Functions
@@ -127,7 +127,10 @@ def volumeRender(img, tf=[], spacing=[1.0, 1.0, 1.0], labeled=False,opacity=0.10
             color_tf.AddRGBPoint(label, *rgb)
     else:
         for p in tf:
-            color_tf.AddRGBPoint(p[0], p[1], p[2], p[3])
+            if inverse:
+                color_tf.AddRGBPoint(p[0], 1-p[1], 1-p[2], 1-p[3])
+            else:
+                color_tf.AddRGBPoint(p[0], p[1], p[2], p[3])
 
     for p in tf:
         opacity_tf.AddPoint(p[0], p[4]*opacity)
@@ -184,9 +187,10 @@ def vtk_create_renderer(actors, light_follows=True):
 
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
+    ren.SetBackground(1, 1, 1)
     renWin = vtk.vtkRenderWindow()
     renWin.AddRenderer(ren)
-    renWin.SetSize(600, 600)
+    renWin.SetSize(1920, 1080)
     # ren.SetBackground( 1, 1, 1)
 
     # create a renderwindowinteractor
