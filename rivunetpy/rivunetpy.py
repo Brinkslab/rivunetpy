@@ -24,10 +24,40 @@ from contextlib import redirect_stdout
 
 
 def check_long_ext(file_to_check, ext):
+    """Checks for chained extensions.
+
+    Checks for chained extensions (e.g., for filename.rnp.swc.)
+    Spltting extensions using os.splitext yields only the last extension,
+    not all, which is not useful when checking for the RivuNetpy extension
+    "flavours", i.e., rnp.swc and rnp.tif.
+
+    Args:
+        file_to_check (str): Filename of a file for which to check the
+          extension.
+        ext (str): Chained extension to check.
+
+    Returns:
+        bool: Whether or not the filename has the specified extension.
+    """
     return file_to_check.split(os.extsep, 1)[-1] == ext.split(os.extsep, 1)[-1]
 
 
 def convert_hyperstack_to_4D_image(img: sitk.Image, z_depth, frames):
+    """Converts an ImageJ hyperstack to a sliceable 4D stack.
+
+    ImageJ saves hyperstacks as 3D images, in which the time axis and z axis
+    are intersperced into one axis. Comprehending this image upon loading in
+    Python is unintuitive. This method converts the imported 3D image into
+    a 4D stack in which the time axis and z axis can be independently sliced.
+
+    Args:
+        img (Image): An ImageJ hyperstack read by SimpleITK.
+        z_depth (int): Amount of images taken in a Z stack (per frame).
+        frames (int): Amount of frames acquired into the HyperStack.
+
+    Returns:
+        Image: A 4D representation of the HyperStack
+    """
     X_size, Y_size, stacks = img.GetSize()
     return sitk.GetImageFromArray(
         np.reshape(
@@ -36,6 +66,19 @@ def convert_hyperstack_to_4D_image(img: sitk.Image, z_depth, frames):
 
 
 def tifffile_read_metadata(file):
+    """Reads voxel size using tifffile.
+
+    Reads the X and Y sizes of the voxel without reading the image contents.
+    Metadata should be annotaded in ImageJ.
+
+    Args:
+        file (str): Filename of the image. Should be a .tif file.
+
+    Returns:
+        tuple: A tuple containing the voxels size in the X dimension, followed
+          followed by the voxel size in the Y dimension. No units are specified.
+          Will return None if metadata cannote be found.
+    """
     with tifffile.TiffFile(file) as tif:
         data = tif.pages[0].tags.get('XResolution')
         if data is not None:
@@ -55,6 +98,21 @@ def tifffile_read_metadata(file):
 
 
 def sitk_read_metadata(img_or_file, key=None):
+    """Reads general metadata using SimpleITK.
+
+    Retrieve metadata created by ImageJ without reading the image contents.
+    Alternatively, read metadata from an already read image.
+
+    Args:
+        img_or_file: Either an already read image of type SimpleITK.Image, or a
+          string specifing a path to an image.
+        key: Name of a specific piece of metadata to be read. If left
+          unspecified, all metadata will be read.
+
+    Returns:
+        dict: Dictonary with names of metadata items as keys, with values
+          belonging to their value in the metadata.
+    """
     if isinstance(img_or_file, str):
         file_reader = sitk.ImageFileReader()
         file_reader.SetFileName(img_or_file)
@@ -94,8 +152,21 @@ def sitk_read_metadata(img_or_file, key=None):
 
 
 class HyperStack(Image):
+    """Image class for easy operations on 4D HyperStacks exported by ImageJ.
+
+    Attributes:
+        frames (int): Number of timepoints in HyperStack.
+        z_size (int): Z-depth of confocal stack.
+        voxel_size (tuple): Tuple containg the size of the voxel in X, Y, and Z.
+        voxel_unit_str (str): String specifiying the unit of the voxel size.
+        period (float): Time in between two frames.
+        period_unit_str (str): String specifying the unit in which the frame
+          interval is measured.
+    """
 
     def __init__(self, *args, **kwargs):
+        """Create an empty HyperStack.
+        """
         self.frames = None
         self.z_size = None
         self.voxel_size = None
@@ -106,6 +177,15 @@ class HyperStack(Image):
         super().__init__(*args, **kwargs)
 
     def _add_metadata(self, metadata_dict):
+        """Processes metatdata stored in a dictionary.
+
+        Metadata that was read as would be done with a regular SimpleITK.Image
+        is processed and useful properties characterizing the image are stored.
+
+        Args:
+            metadata_dict (dict): Dictonary with metadata item names (as used
+            by IamgeJ) as keys with their respective values.
+        """
 
         is_hyperstack = metadata_dict.get('hyperstack')
 
@@ -196,6 +276,20 @@ class HyperStack(Image):
 
     @classmethod
     def from_file(cls, fname, metadata_only=False):
+        """Automatically loads a HyperStack from file.
+
+        Loads an image from file and tries to automatically reslice the image
+        as saved in ImageJ to a 4D stack whilst adding appropriate metadata.
+
+        Args:
+            fname (str): Filename of the HyperStack saved by ImageJ.
+            metadata_only (bool): Whether to read only the metadata and skip
+              reading the image data from file (fast) or also read the image
+              data.
+
+        Returns:
+            HyperStack: Python interface for ImageJ HyperStack exports.
+        """
         # Hacky bootstrapping to read the file
         if not metadata_only:
             # sitk.ProcessObject_SetGlobalWarningDisplay(False)
@@ -246,6 +340,20 @@ class HyperStack(Image):
         return hyperstack
 
     def t_project(self, mode: str = 'MAX') -> sitk.Image:
+        """Projects through the time axis.
+
+        Projects the intensities of the image along the time axis. In other
+        words, flattens the image in the time axis. Can be set to an average
+        projection or maximum intensity projection.
+
+        Args:
+            mode (str): Sets the projection type. MAX yields a maximum
+              intensity projection. AVG yields a mean intensity projection.
+
+        Returns:
+            SimpleITK.Image: Projected image.
+
+        """
         if mode == 'MAX':
             function = np.amax
         elif mode == 'AVG':
@@ -264,8 +372,32 @@ class HyperStack(Image):
 
 
 class Tracer():
+    """Programming interface for the RivuNetpy tracer.
+
+    Attributes:
+        filename (str): Filename of the original image to be traced.
+        out (str): Absolute path to the output folder.
+        blur (int): Radius of the Guassian blur filter kernel to be applied
+          before segmentation.
+        threshold (int): Manual threshold level for image.
+        tolerance (float): Fraction difference in soma size allowed soma
+          recognition in segmentation.
+        overwrite_cache (bool): Whether or not to use stored segmentations or
+          reconstructions from disk.
+        quality (bool): Quality setting for Rivuletpy tracer.
+        asynchronous (bool): Setting for asynchronous segmentation and tracing.
+          Set to True for normal use and to False for debugging.
+        neurons (list): List containing Neuron objects which store
+          segementation and trace results.
+        use_hyperstack (bool): Strictly check for HyperStack input. Set to True.
+          Future iterations should implement methods for allowing other (e.g.
+          2D space + 1D time) inputs.
+        hyperstack (HyperStack): Original image upon reading from file.
+    """
     # TODO: Clean up new class-based methods
     def __init__(self):
+        """Instantiates a Tracer.
+        """
         self.filename = None
         self.out = None
         self.blur = None
@@ -280,6 +412,11 @@ class Tracer():
         self.hyperstack = None
 
     def set_file(self, filename: str):
+        """Sets the input image.
+
+        Args:
+            filename (str): Path to the input image.
+        """
         self.filename = filename
 
         img_dir, img_name = os.path.split(self.filename)
@@ -291,70 +428,130 @@ class Tracer():
         return self
 
     def set_output_dir(self, out: str):
+        """Sets the output directory.
+
+        Args:
+            out (str): Path to the output directory.
+        """
         self.out = out
         return self
 
     def set_threshold(self, threshold: int):
+        """Sets the threshold.
+
+        Args:
+            threshold (int): Optional manual threshold level for segementation.
+        """
         self.threshold = threshold
         return self
 
     def set_blur(self, blur: float):
+        """Blurs the image before segmentation by a set amount.
+
+        Args:
+            blur (float): Radius in pixels of the Gaussian blur applied to the
+              image before segmentation.
+        """
         self.blur = blur
         return self
 
     def set_tolerance(self, tolerance: int):
+        """Sets the tolerance for soma recognition.
+
+        During segmentation, somata within a range of sizes are identified.
+        Sets the tolerance, or the width of the range of somata that are
+        found. Higer numbers yield more somata.
+        """
         self.tolerance = tolerance
         return self
 
     def overwrite_cache_on(self):
+        """Forces redo of segmentation and reconstruction.
+
+        Overwrites cache saved during previous run.
+        """
         self.overwrite_cache = True
         return self
 
     def overwrite_cache_off(self):
+        """Sets tracer to use previous results (fast).
+
+        Utilizes cache saved during previous run.
+        """
         self.overwrite_cache = False
         return self
 
     def set_overwrite_cache(self, overwrite: bool):
+        """Sets whether to redo segmentation and reconstruction each run.
+        """
         self.overwrite_cache = overwrite
         return self
 
     def quality_on(self):
+        """Turns on tracer (Rivuletpy) quality setting.
+        """
         self.quality = True
         return self
 
     def quality_off(self):
+        """Turns off tracer (Rivuletpy) quality setting.
+        """
         self.quality = False
         return self
 
     def set_quality(self, quality: bool):
+        """Sets tracer (Rivuletpy) quality setting.
+        """
         self.quality = quality
         return self
 
     def asynchronous_on(self):
+        """Turns on parallel segmentation and reconstruction.
+        """
         self.asynchronous = True
         return self
 
     def asynchronous_off(self):
+        """Turns off parallel segmentation and reconstruction.
+
+        Useful for debugging.
+        """
         self.asynchronous = False
         return self
 
     def set_asynchronous(self, asynchronous: bool):
+        """Sets whether to apply parallel segmentation and reconstruction.
+        """
         self.asynchronous = asynchronous
         return self
 
     def hyperstack_on(self):
+        """Strictly allows only input HyperStacks saved by ImageJ.
+        """
         self.use_hyperstack = True
         return self
 
     def hyperstack_off(self):
+        """Turns off strict need for ImageJ HyperStack images.
+
+        Using this setting can lead to unexpected behavior.
+        """
         self.use_hyperstack = False
         return self
 
     def set_hyperstack(self, use_hyperstack: bool):
+        """Sets whether to strictly allow only ImageJ HyperStacks as input.
+        """
         self.use_hyperstack = use_hyperstack
         return self
 
     def _plot(self, titles=False):
+        """Summary plot of segmentation and reconstruction.
+
+        Args:
+            titles (bool): Give each image a title describing the processing
+              step it shows.
+        """
 
         tu_delft_colors = ['#0C2340',
                            '#00B8C8',
@@ -433,6 +630,8 @@ class Tracer():
         fig.show()
 
     def _must_read_segmentation_file(self):
+        """Checks if there are any previous segementaion results on disk.
+        """
         return (
                 os.path.exists(self.out)
                 and not self.overwrite_cache
@@ -440,6 +639,8 @@ class Tracer():
         )
 
     def _read_segmentation_from_file(self):
+        """Reads previous segmentations from file into memory.
+        """
         self.neurons = []
         for fname in os.listdir(self.out):
             if check_long_ext(fname, RIVULET_2_TREE_IMG_EXT):
@@ -451,6 +652,8 @@ class Tracer():
         self.hyperstack = HyperStack().from_file(self.filename, metadata_only=True)
 
     def _segment(self):
+        """Loads an image from disk and segments it.
+        """
         ################ LOAD IMAGE AND METADATA #################
         self.hyperstack = HyperStack().from_file(self.filename)
 
@@ -473,6 +676,8 @@ class Tracer():
         # neuronsegmentor.plot_full_segmentation()
 
     def _write_segmentation_to_file(self):
+        """Stores the results of the segmentation to disk.
+        """
         for ii, neuron in enumerate(self.neurons):
             # Store images
             img_fname = 'neuron_{:04d}{}'.format(ii, RIVULET_2_TREE_IMG_EXT)
@@ -483,6 +688,23 @@ class Tracer():
 
     @staticmethod
     def _trace_single(neuron, threshold, speed, quality, force_retrace, voxel_size):
+        """Reconstructs an image of a single neuron.
+
+        Args:
+            neuron (Neuron): Class storing the properties and the image of a
+              single neuron within the original image.
+            threshold (int): Manual override for a threshold applied to the
+              image before reconstruction.
+            speed (bool): Rivuletpy speed setting. Should be set to False.
+            quality (bool): Rivuletpy quality setting. Should be set to True.
+            force_retrace (bool): Whether to ignore previous segmentation
+              results on disk and instead discard data and resegment.
+            voxel_size (tuple): Tuple containing voxel size in X, Y, and Z
+              in um of the orignal image.
+
+        Returns:
+            Neuron: A Neuron dataclass containing the reconstruction.
+        """
         starttime = time.time()
         img = neuron.img
         neuron.swc_fname = '{}{}'.format(neuron.img_fname.split(RIVULET_2_TREE_IMG_EXT)[0], RIVULET_2_TREE_SWC_EXT)
@@ -495,7 +717,7 @@ class Tracer():
             print(f'Neuron ({neuron.num})\t --Loaded SWC from disk')
         else:
             if threshold in (float, int):
-                pass
+                reg_thresh = threshold
             elif type(threshold) is str:
                 _, reg_thresh = apply_threshold(img, mthd=threshold)
             else:
@@ -552,6 +774,8 @@ class Tracer():
         return neuron
 
     def _trace_all(self):
+        """Reconstructs a batch of images each containing a single neuron.
+        """
         if self.asynchronous:
             with Pool(processes=os.cpu_count() - 1) as pool:
                 result_buffers = []
@@ -579,7 +803,25 @@ class Tracer():
             self.neurons = result_buffers
 
     @staticmethod
-    def _get_voltage_single(neuron: Neuron, hyperstack: HyperStack, force_redo: bool, window_scale: int = 5):
+    def _get_voltage_single(neuron: Neuron, hyperstack: HyperStack, force_redo: bool, window_scale: float = 5):
+        """Gets the voltage trace of a single neuron at the soma.
+
+        Retrieves the change in intensity over each frame around the soma of
+        a neuron. For each frame, retrieves the average intensity from a
+        spherical region with a radius close to that of the soma.
+
+        Args:
+            neuron (Neuron): Neuron dataclass containing the reconstruction of
+              the neuron to be analyzed.
+            hyperstack (HyperStack): The original image.
+            force_redo (bool): Whether to discard results stored to disk from
+              previous runs and redo the voltage recovery.
+            window_scale (float): Scale factor for increasing or descreasing
+              the radius of the spherical area of interest.
+
+        Returns:
+            Neuron: Neuron dataclass containing the recovered trace.
+        """
         neuron.i_fname = '{}{}'.format(neuron.img_fname.split(RIVULET_2_TREE_IMG_EXT)[0], '.npy')
 
         if os.path.exists(neuron.i_fname) and not force_redo:
@@ -622,6 +864,8 @@ class Tracer():
         return neuron
 
     def _get_voltage_all(self):
+        """Gets the votlage trace from all cells.
+        """
         hyperstack = HyperStack().from_file(self.filename)
 
         if self.asynchronous:
@@ -641,6 +885,10 @@ class Tracer():
         self.neurons = results
 
     def execute(self):
+        """Start the tracer.
+
+        Initiates segmetnation, reconstruction, and voltage retrieval.
+        """
 
         if self.threshold is not None and not isinstance(self.threshold, (int, float, str)):
             raise TypeError(

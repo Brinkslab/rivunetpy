@@ -5,8 +5,7 @@ import time
 if __name__ == '__main__':
     start_time = time.time()
 
-    # filename = r'H:\Duet\Visualizations\MicroscopeImages\HyperStack.tif'
-    filename = r"H:\Duet\Synthetic Data\dataset_s0_c9\dataset_s0_c9_4D_20dB.tif"
+    filename = r"H:\dataset_s0_c9_4D_20dB.tif"
 
     tracer = Tracer()
     tracer.set_file(filename)
@@ -16,4 +15,3 @@ if __name__ == '__main__':
     neurons = tracer.execute()
 
     print(f'\n\nDone in {time.time() - start_time} s')
-

@@ -424,7 +424,7 @@ class NeuronSegmentor:
     Attributes:
         img (Image): Input image
         threshold (float): Threshold used in the initial processing steps.
-        aggressiveness (float): How agressive the thresholding is when adding pixels to the neuron regions.
+        seed_tolerance (float): Fraction allowable difference in soma size from initial estimation.
         binary (Image): Binarized version of the input image
         soma_scale (int): Scale of the largest soma in the image.
         soma_seeds (np.ndarray): Locations of all the individual somata in the image.
@@ -442,6 +442,11 @@ class NeuronSegmentor:
             img: Input image that will be segmented.
             threshold (float, optional): Optional manual threshold setting. If no threshold is passed,
               Maximum Entropy thresholding will be used for the initial thresholding of the image.
+            tolerance (float, optional): Fraction allowable difference in soma size from initial estimation.
+            blur (int, optional): Radius of Gaussian blur kernel applied before processing.
+            watershed (bool, optional): Whether or not to use a watershed step for soma identification.
+              Set to True for wide FOV images and False for narrow FOV images
+              (many cells vs. few cells resp.).
 
         Raises:
             ValueError: If the threshold is not a number.

@@ -36,7 +36,23 @@ matplotlib.rcParams['axes.prop_cycle'] = matplotlib.cycler(color=tu_delft_colors
 
 
 def flatten(image, as_sitk=False, whitebackground=False):
+    """Projects a 3D image to a 2D image.
 
+    Projects a 3D image to a 2D image along its smallest axis. Uses a maximum
+    intensity projection. Defaults to output an array fit for plotting using
+    matplotlib.pyplot.imshow.
+
+    Args:
+        as_sitk (bool, optional): Optional setting for returning an Image
+          rather than an np.ndarray. Defaults to False to allow for easy
+          plotting.
+        whitebackground (bool, optional): Optional setting to allow for
+          images with a white background and a black foreground. Defaults to
+          False. When set to True, a miniumum intensity projection is used.
+
+    Returns:
+        np.ndarray: A flattened image ready for plotting.
+    """
     if type(image) is sitk.Image:
         image = sitk.GetArrayFromImage(image)
 
@@ -58,7 +74,21 @@ def flatten(image, as_sitk=False, whitebackground=False):
         return flat_image
 
 
-def _plot_swc(swc: SWC, ax, center_fig, c=None, linewidths=None, unitstring=''):
+def _plot_swc(swc: SWC, ax, center_fig: bool, c=None, linewidths=None, unitstring=''):
+    """Plots an SWC.
+
+    Plots an SWC to a matplotlib axis.
+
+    Args:
+        ax: matplotlib axis to plot to.
+        center_fig (bool): Whether to center the SWC on (0, 0).
+        c (tuple, optional): Color to plot SWC as represented as a tuple
+          containing RGB values between 0 and 1.
+        linewidths (list, optional): List of linewidths for each secition in
+          the SWC. Must equal the number of segments.
+        unitstring (str, optional): String representing the scale units. Will
+          be used in the axis labels.
+    """
     MAX_SEGMENTS = 2_500
 
     smallest_dim = 2 # Assume confocal stack is thinnest in Z
@@ -120,6 +150,12 @@ def _plot_swc(swc: SWC, ax, center_fig, c=None, linewidths=None, unitstring=''):
                 )
 
 def plot_segmentation(neurons, ax=None):
+    """Plot the segmentation results.
+
+    Args:
+        neurons (list): List of rivunetpy.utils.cells.Neuron objects to plot.
+        ax: matplotlib axis to plot to.
+    """
 
     prop_cycle = plt.rcParams['axes.prop_cycle']
     colors = cycle(prop_cycle.by_key()['color'])

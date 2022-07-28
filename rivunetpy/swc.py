@@ -108,6 +108,12 @@ class SWC(object):
         self._data = np.vstack((self._data, new_branch))
 
     def clean(self):
+        """Cleans the SWC file to allow for import into NetPyNE.
+
+        Reassings TypeIDs and rearranges tree structure to have SampleIDs
+        increase with distance from the soma (rather than decrease, as in
+        unmodified Rivuletpy output).
+        """
 
         sec_list = [1, 2, 3, 4] # Valid TypeIDs for NetPYne
         nanint = np.zeros(1)
@@ -200,6 +206,11 @@ class SWC(object):
                                  f'ParentID is {self._data[ii, 6]}')
 
     def apply_soma_TypeID(self, soma: Soma):
+        """Assign as soma TypeID for segments located within the soma.
+
+        Uses the soma mask created by Rivuletpy to locate somatic segments.
+        Also assigns the SampleID -1 to the root segment.
+        """
 
         mask = soma.mask.flatten()
         indices = np.ravel_multi_index(self._data[:, [2, 3, 4]].astype(int).T, soma.mask.shape)
@@ -212,6 +223,8 @@ class SWC(object):
         self._data[0, 6] = -1
 
     def apply_scale(self, factors: tuple):
+        """Rescales the SWC from pixel units to um.
+        """
 
         self._data[:, 2] = self._data[:, 2] * factors[0] # Scale X
         self._data[:, 3] = self._data[:, 3] * factors[1] # Scale Y
@@ -319,7 +332,7 @@ class SWC(object):
 
     def match(self, pos, radius):
         '''
-        Find the closest ground truth node 
+        Find the closest ground truth node
         '''
 
         nodes = self._data[:, 2:5]
@@ -341,10 +354,22 @@ class SWC(object):
         saveswc(fname, self._data)
 
     def set_view_density(self, perc):
+        """Sets percentage of visible sections for 3D VTK render.
+        """
         assert 1 <= perc <= 100, 'Quantile of segments (in %) to plot should be between 1 and 100'
         self.swc_density = perc
 
     def set_fanciness(self, fancy):
+        """Sets fanciness of SWC in VTK 3D render.
+
+        When set to True, the segments of the SWC are rendered as cylinders
+        with variable radii (slow). When set to false, the brances of the SWCs
+        are rendered as lines with a constanst thickness (fast).
+
+        Args:
+            fancy (bool): Whether to apply fancy visualization to the SWC in
+              VTK.
+        """
         self.swc_fancy = fancy
 
     def get_array(self):
@@ -391,6 +416,16 @@ class SWC(object):
                 break
 
     def swc_to_dicts(self):
+        """Creates dictionaries and lists describing the tree structure.
+
+        Returns:
+            tuple: Tuple containing: (1) A dictionary form of the SWC file in
+              which the keys are SampleIDs and the values are ParentIDs, (2) a
+              dictionary with SampleIDs as keys and their children (i.e., the
+              nodes whose ParentID are the SampleID of the key), (3) a list of
+              SampleIDs that do not have children, (4) a dictionary containing
+              the indecies of SampleIDs.
+        """
         # Create connectivity dictionary
 
         swc_dict = {}
@@ -417,6 +452,14 @@ class SWC(object):
         return swc_dict, swc_children, swc_ends, swc_indices
 
     def get_all_segments(self):
+        """Finds linear branches within the tree structure.
+
+        Finds unbranched groups of nodes within the tree structure. Used to
+        speed up VTK rendering.
+
+        Returns:
+            list: A list containing lists of groups of unbranched nodes.
+        """
         swc_dict, swc_children, swc_ends, swc_indices = self.swc_to_dicts()
 
         segment_maps = []
@@ -436,6 +479,18 @@ class SWC(object):
         return segment_maps
 
     def as_actor(self, color=None, centered=False):
+        """Creates a VTK actor from a SWC file.
+
+        Args:
+            color (tuple, optional): Optional color for the SWC. Pass a tuple
+              with RGB values between 0-1.
+            centered (bool, optional): Option to move SWC file in space such
+              that the center of mass of the SWC is put on the origin of the
+              space rendered in VTK.
+
+        Returns:
+            vtk.vtkAssembly: (Assembly of) VTK actor(s).
+        """
         # Create the polydata where we will store all the geometric data
         # https://stackoverflow.com/questions/17547851/create-vtkpolydata-object-from-list-with-tuples-in-python
         # https://kitware.github.io/vtk-examples/site/Python/GeometricObjects/LongLine
@@ -790,6 +845,13 @@ def connected_components(nodes):
 
 
 def clean(filenames):
+    """Programming interface for cleaning SWCs on disk.
+
+    Cleans SWCs on disk such that these can be imported into NetPyNE.
+
+    Args:
+        filename (bool): Path to an SWC file.
+    """
     import os
     from rivunetpy.utils.extensions import RIVULET_2_TREE_SWC_EXT
 
